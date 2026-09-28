@@ -77,7 +77,7 @@ import { createChatSdk, z } from 'page-agent-sdk'
 | `page-agent-sdk/storage` | `createSessionStore` / `createMemoryBackend` / `createWebStorageBackend` / `isQuotaError` | persistence layer only, no Agent |
 | `page-agent-sdk/query` | `jpEval` / `searchJson` / `runSandboxedScript` + all jsonUtils / schemaUtils pure fns | JSON query / sandbox / path helpers |
 | `page-agent-sdk/llm` | `createProxyLlm` + `ProxyLlmMode` / `ProxyLlmOptions` | proxy connection to avoid leaking apiKey |
-| `page-agent-sdk/headless` | `createChatSdk` + full core API (`createChatContext`/`useChat`, etc.), **without** ChatDialog/marked/highlight.js/dompurify | `ui:false` custom UI, leaner bundle |
+| `page-agent-sdk/headless` | `createChatSdk` + full core API (`createChatContext`/`useChat` incl. `editAndResend` message edit-and-rerun, etc.), **without** ChatDialog/marked/highlight.js/dompurify | `ui:false` custom UI, leaner bundle |
 
 ```js
 import { createSessionStore, createMemoryBackend } from 'page-agent-sdk/storage'

@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [4.25.0] - 2026-09-28
+
+### Fixed
+
+- **思考耗尽空收口回灌(reasoning-exhausted,诊断驱动 2026-09-28)**:思考型模型(deepseek-flash 实测)把全部 completion 耗在 reasoning 上直接停 —— 空 content + 零 toolCalls + `reasoning_tokens>0`(实测 643/643 全思考,远低于 4000 截断阈且 stop_reason 非 length → `completion_truncated_retry` 检测不覆盖)→ 静默空气泡收口,用户端表现为「问完没答」。新增第二检测分支:该形态 → 单次回灌「直接输出回答正文,可以有少量思考但必须给正文」(`reasoning_exhausted_retry` 留痕,与截断独立计数,极端形态两分支最多各回灌一次;`pendingFormatRetry` 绕 rounds 预算);零 reasoning 的纯空输出(网关空回)不触发 —— 本检测只治「思考了但没答」,原空回复语义保持。e2e 1287 → **1294**(hang-feedback:正例 643/643 全思考回灌作答 + 恰一次 + 留痕 + 文案指向正文 + 不误触截断分支;对照纯空输出零触发)。
+- **browser 断言靶修正(complex-demo dom-inspect 用例,4.24.4 遗留)**:原断言靶 `header-title` 是 SDK ChatHeader 的 class —— 4.24.4「dom 检索排除 SDK 自身 UI」按设计把它从检索面剔除(且 `.header-title` 作 dom_info selector 被 isInsideSdkUi 拒),断言自 4.24.4 起必然红(与功能无关的测试过时)。靶改为宿主真实元素:dom_search 双靶(`h1.pr-title` 或 `<title>`,前者文本可被前序用例 localStorage draft 污染、后者恒含 query 文本)+ dom_info `h1.pr-title`(元素恒在,与文本无关)。
+
+### Added
+
+- **编辑已发送 user 消息并从该点重跑(edit-and-resend)**:hover 任意 user 消息点「编辑」→ 气泡原地变编辑器(Enter 保存 / Esc 取消 / Shift+Enter 换行,IME 合成期回车不误发)→ 保存后截断该消息之后的全部历史从编辑点重跑;生成中点编辑 = 先自动 stop(partial 保留、挂起收口)再编辑,正对「停止后修改刚刚的输入重新执行」的心智。① `useChat.editAndResend(index, newContent)`(双侧 d.ts 同步):保留原消息 focuses/images/quote 附带字段重发(retry 路径丢字段坑的补全)、纯图消息空文本落 `IMAGE_ONLY_PLACEHOLDER`、截断即刻 `onPersist`(防新轮完成前刷新丢编辑)、`onBeforeRegenerate` 同步触发(清子 agent 代码复用缓存);② **roundSeq 轮次代次守卫**:`runAssistantStream` 入口自增、`finishRound` 入口 + `await onPersist` 之后双检查 —— 编辑重跑 stop 旧轮后同步开新轮,旧轮 finally 异步收口到达时 seq 已过气整体 no-op,不再拆新轮的 loading/controller/确认条(封住 onPersist 挂起窗口的单靠入口检查封不住的竞态深度);③ 编辑态归属 `ChatContext`(`editingMessage`/`startEdit`/`cancelEdit`/`submitEdit`,双侧 d.ts 同步):身份用消息对象引用而非 index(免疫编辑期间 index 漂移),点 B 自动弃 A 单编辑互斥;④ 新组件 `MessageEdit`(纯 props 原子,浅底自带不透明背景,`--cs-*` 主题变量)+ `MessageActions` 扩 `editable` + user 行 hover 显示规则;⑤ i18n 新 4 键 `edit/editTitle/editSave/editCancel`(zh/en + d.ts 投射)。selftest 3793 → **3817**(sec-136:正常路径截断重跑/附带字段保留/onBeforeRegenerate/loading 排队清空留痕 + 边界非 user/越界/空文本无图拒/纯图占位 + **竞态核心**:永不 settle 流上立即编辑 → 新轮 loading 不被旧 finally 拆掉且 stop 仍可中止 + 非流式路径不回归);browser 179 → **184**(edit-resend spec 5 用例:hover 编辑改文重跑截断 / Enter 提交 Esc 取消 / 编辑互斥 / loading 自动停再编辑 / focus chip 保留);headless 体积阈值 790→800KB(useChat 增量 ~1.2KB,改动前 789.2KB 已贴旧阈)。
+
+### Changed
+
+- **`finishRound` 签名变 `finishRound(seq)`(内部函数,非公共面)**:过气轮不动共享态 —— 跳过 settleRunningSteps(不去 settle 新轮真正 running 的步骤)+ `pendingApproval` 清理加 seq 守卫(过气轮不得清新轮确认条);既有 stop→sendMessage 排队序列化路径行为零变化(selftest 3817 全绿佐证)。
+
 ## [4.24.5] - 2026-09-23
 
 ### Fixed

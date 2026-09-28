@@ -984,6 +984,7 @@ export function createAgent(options: CreateAgentOptions) {
       let lastFinalContent: string | null = null // 自纠路径缓存:verify 拒掉的最终答,供 rounds 耗尽兜底优先返回
       let formatRetries = 0 // 格式异常自纠计数:模型把工具调用写成文本(伪 XML/标签)时回灌反馈重生成,限次防死循环
       let truncRetried = false // 截断自纠已用标记(completion_truncated 单次防死循环)
+      let reasonExhaustedRetried = false // 思考耗尽自纠已用标记(reasoning_exhausted 单次防死循环;与截断独立计数,极端形态两者最多各回灌一次)
       let pendingFormatRetry = false // 上一轮触发了格式自纠(已 push feedback 待 LLM 重发):让 while 暂时绕过 rounds 预算给重试机会——重试是格式修正、非工具轮次,不该被 maxToolRounds 挡。实测痛点:DSML 在 rounds 耗尽后出现,重试被 while 挡致未发生 → 仍静默死亡。maxIterations(maxToolRounds*3) 仍作死循环硬上限
       const maxFormatRetries = 2
       while ((rounds < maxToolRounds || pendingFormatRetry) && iterations < maxIterations) {
@@ -1055,6 +1056,19 @@ export function createAgent(options: CreateAgentOptions) {
               pendingFormatRetry = true // 绕过 rounds 预算给 LLM 重发机会(同 garbled 重试;maxIterations 兜底)
               log('error', { stage: 'completion_truncated_retry', completionTokens: nuTrunc?.completion_tokens, stopReason: stopReason ?? null, maxTokens: (llm as any)?.maxTokens ?? null, hint: '空输出且 completion 达上限,疑似 max_tokens 截断;回灌分步写入指引' })
               currentMessages.push(new HumanMessage('⚠️ 你上一轮输出为空(疑似被 max_tokens 截断:单次输出过长,常见于把完整大段代码塞进一次工具调用参数)。必须改用分块输出,不要一次性输出完整大段内容:① 先写小体积骨架 —— 大 code 场景先 write 组件、code 字段只含开头一小段(≤800 字符);② 用增量追加逐块补全 —— write({ patch:{ op:"append", jsonPath:"<该组件 code 的路径>", value:"<后续代码块,每段 ≤1500 字符>" } })(append 对字符串是尾接,可连续多次直至完整);③ 已写入部分勿在后续调用重传全文。其他大内容同理:先骨架后增量。'))
+              continue
+            }
+
+            // reasoning-exhausted(2026-09-28 诊断驱动):思考型模型(deepseek-flash 实测)把全部 completion
+            // 耗在 reasoning 上直接停 —— 空 content + 零 toolCalls + reasoning_tokens>0(实测 643/643 全思考,
+            // 远低于 4000 截断阈且 stop_reason 非 length → 截断检测不覆盖)→ 静默空气泡收口。正常回答总有正文,
+            // completion 全为 reasoning 必异常;单次回灌「直接给正文」,重试仍空放行(原空回复语义)。
+            // reasoning=0 的纯空输出(网关空回/模型无话)不触发 —— 本检测只治「思考了但没答」
+            if (!response.content && (nuTrunc?.reasoning_tokens ?? 0) > 0 && !reasonExhaustedRetried) {
+              reasonExhaustedRetried = true // 单次防死循环(与截断独立计数)
+              pendingFormatRetry = true // 绕过 rounds 预算给 LLM 重发机会(同上;maxIterations 兜底)
+              log('error', { stage: 'reasoning_exhausted_retry', completionTokens: nuTrunc?.completion_tokens ?? null, reasoningTokens: nuTrunc?.reasoning_tokens ?? null, hint: '空输出且 completion 全为 reasoning,疑似思考耗尽未答;回灌直接作答' })
+              currentMessages.push(new HumanMessage('⚠️ 你上一轮把全部输出都花在了思考(reasoning)上,没有产出任何正文,用户看到的是空回复。请直接输出对用户问题的回答正文;可以有少量必要思考,但本轮必须给出正文。'))
               continue
             }
           }

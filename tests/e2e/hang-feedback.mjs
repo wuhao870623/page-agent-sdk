@@ -403,6 +403,46 @@ export async function run() {
     sdk.unmount()
   }
 
+  console.log('[e2e:hang-feedback] reasoning-exhausted:空输出 + completion 全为 reasoning → 直接作答回灌(2026-09-28 诊断驱动:deepseek-flash 643/643 全思考静默空收口,低于 4000 截断阈且 stop_reason 非 length,截断检测不覆盖)')
+  {
+    // 队列:① 空输出 + completion 643 全 reasoning(诊断实测形态,DeepSeek completion_tokens_details)② 回灌后正常作答
+    const llm = stubModel(
+      { text: '', usage: { prompt_tokens: 13523, completion_tokens: 643, total_tokens: 14166, completion_tokens_details: { reasoning_tokens: 643 } } },
+      { text: 'Flink 的典型应用场景:实时数仓、风控反欺诈、CEP 复杂事件检测等。' },
+    )
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-reason-exh', storage: false, llm,
+      capabilities: { ...CAPS, subagent: false },
+    })
+    await sdk.mount()
+    const reply = await sdk.send('我是说FLink')
+    assert(reply.includes('Flink 的典型应用场景'), `✓ 思考耗尽回灌后 LLM 直接作答收口(原:静默空回复气泡;实际:${reply.slice(0, 20)})`)
+    assert(llm.calls === 2, `✓ 思考耗尽回灌恰一次(模型被调 2 次;实际 ${llm.calls})`)
+    const stages = sdk.debugLogs.value.map((l) => l.data?.stage).filter(Boolean)
+    assert(stages.includes('reasoning_exhausted_retry'), '✓ debugLogs 留痕 reasoning_exhausted_retry(可观测性)')
+    const feedback = (llm.lastMessages ?? []).map((m) => String(m.content)).join('\n')
+    assert(feedback.includes('没有产出任何正文'), '✓ 回灌文案指向「直接给正文」(而非截断分支的分块写入指引)')
+    assert(!stages.includes('completion_truncated_retry'), '✓ 思考耗尽形态不误触截断分支(643 < 4000 阈,两检测正交)')
+    sdk.unmount()
+  }
+  {
+    // 对照:空输出但零 reasoning(网关空回/模型无话,completion 643 全部非思考形态不存在,取 completion=0)→ 不触发,保持原空回复语义
+    const llm = stubModel(
+      { text: '', usage: { prompt_tokens: 100, completion_tokens: 0, total_tokens: 100 } },
+      { text: '第二轮正常文本' },
+    )
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-reason-exh-ctl', storage: false, llm,
+      capabilities: { ...CAPS, subagent: false },
+    })
+    await sdk.mount()
+    const reply = await sdk.send('随便说点什么')
+    assert(reply === '', `✓ 纯空输出(零 reasoning)→ 不误触发思考耗尽回灌,原空回复语义保持(实际:${reply.slice(0, 20)})`)
+    const stages = sdk.debugLogs.value.map((l) => l.data?.stage).filter(Boolean)
+    assert(!stages.includes('reasoning_exhausted_retry'), '✓ 零思考空输出零留痕(本检测只治「思考了但没答」)')
+    sdk.unmount()
+  }
+
   console.log('[e2e:hang-feedback] ui-quick-wins Q3:write 审批 diff 预览(approval.preview 载荷两态)')
   {
     const mk = async (preview) => {

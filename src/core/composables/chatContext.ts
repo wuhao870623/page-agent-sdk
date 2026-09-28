@@ -126,6 +126,15 @@ export interface ChatContext {
   clearQuote: () => void
   /** 修改排队任务:填回输入框(供编辑)+ 从队列移除 */
   editQueued: (idx: number) => void
+  // ===== 消息编辑(edit-and-resend;草稿文本为 MessageEdit 组件本地态,不进 ctx)=====
+  /** 编辑中的 user 消息对象(null=无;对象引用作身份,免疫 index 漂移) */
+  editingMessage: Ref<AgentMessage | null>
+  /** 进入消息编辑态(生成中自动先 stop;点 B 自动弃 A,单编辑互斥) */
+  startEdit: (msg: AgentMessage) => void
+  /** 退出编辑态(取消) */
+  cancelEdit: () => void
+  /** 提交编辑:改写该消息并从该点重跑(保留附带字段,截断其后) */
+  submitEdit: (text: string) => void
   /** 是否为流式占位 assistant(末位 + loading + content/reasoning 均空 → 显示三点动画) */
   isPendingAssistant: (idx: number) => boolean
   /** 全部聚焦焦点(响应式:infoTick ++ → 重算;空数组=未聚焦;ChatInput 多 chip 渲染 🎯 path) */
@@ -299,6 +308,25 @@ export function createChatContext(opts: ChatContextOptions = {}): ChatContext {
     removeQueuedTask(idx)
   }
 
+  // 消息编辑(edit-and-resend):身份用消息对象引用而非 index —— 编辑期间从输入区再发消息/undo 换数组
+  // 都会让行 index 漂移,引用恒稳;点 B 自动弃 A(单编辑互斥);submitEdit 先清 editing 再 indexOf 现算
+  // (消息已被移除/历史被换时 -1 → 仅退出编辑,不误伤他行)
+  const editingMessage = ref<AgentMessage | null>(null)
+  const startEdit = (msg: AgentMessage): void => {
+    if (msg.role !== 'user') return
+    if (state.loading) chat.stop() // 生成中编辑 = 自动停止(partial 保留、挂起收口),编辑提交时随截断移除
+    editingMessage.value = msg
+  }
+  const cancelEdit = (): void => { editingMessage.value = null }
+  const submitEdit = (text: string): void => {
+    const target = editingMessage.value
+    editingMessage.value = null
+    if (!target) return
+    const idx = state.messages.indexOf(target)
+    if (idx < 0) return
+    void chat.editAndResend(idx, text)
+  }
+
   // 流式占位 assistant 检测(末位 + loading + 无内容/思考/步骤 → 三点动画,避免再叠加底部 loading 头像)。
   // reasoning/steps 任一到达即让位:思考块/步骤块自带活跃指示,占位泡再叠 = 双 loading 点(用户反馈:
   // use_html 步骤后多一个紫色呼吸点);content 空但有 reasoning/steps 时整泡不渲染(防空气泡框)。
@@ -365,6 +393,10 @@ export function createChatContext(opts: ChatContextOptions = {}): ChatContext {
     setQuote,
     clearQuote,
     editQueued,
+    editingMessage,
+    startEdit,
+    cancelEdit,
+    submitEdit,
     isPendingAssistant,
     focuses,
     planConfirmation,

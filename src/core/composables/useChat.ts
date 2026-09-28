@@ -9,7 +9,8 @@
  *  - onPersist:一轮完成后回调(落盘)
  *  - onClear:清空时回调(新建会话)
  *
- * sendMessage / regenerate 共用 runAssistantStream:前者先 push user,后者移除旧 assistant 后以历史重发。
+ * sendMessage / regenerate / editAndResend 共用 runAssistantStream:send 先 push user;regenerate 移除旧
+ * assistant 后以历史重发;editAndResend 改写任意位置 user 消息(保留附带字段)截断其后重跑。
  */
 import { reactive, ref } from 'vue'
 import type { AgentMessage, AgentState, StreamHandler, ToolStep, AgentImage, MessageQuote } from '../types'
@@ -73,8 +74,12 @@ export function useChat(opts: UseChatOptions = {}) {
   /** 距底部多少像素内视为"在底部"(吸附判定阈值,用于滚回底部恢复跟随) */
   const STICKY_THRESHOLD = 64
 
-  /** 当前生成的 AbortController(stop() 中止用;每次 sendMessage/regenerate 新建,停止不影响后续发送) */
+  /** 当前生成的 AbortController(stop() 中止用;每次 sendMessage/regenerate/editAndResend 新建,停止不影响后续发送) */
   let currentController: AbortController | null = null
+  /** 轮次代次号(edit-and-resend 竞态守卫):runAssistantStream 入口自增,finishRound 前后比对;
+   * 编辑重跑 stop 旧轮后同步开新轮,旧轮的 finally 在异步收口途中到达时 seq 已过气 → 整体 no-op,
+   * 不再拆新轮的 loading/controller/确认条(单靠入口时序检查封不住 onPersist 挂起窗口) */
+  let roundSeq = 0
   /** 排队待发的任务内容(生成中用户又发消息 → 入队显示在排队区,生成完依次自动 addMessage+执行;
    * 不先进 messages 避免多条排队时打乱"最后 user"定位;可撤销/修改;stop 清空) */
   const queuedTasks = ref<string[]>([])
@@ -121,6 +126,7 @@ export function useChat(opts: UseChatOptions = {}) {
    * 流式优先,否则非流式 fallback。abort 不计入 error;失败移除空占位。
    */
   async function runAssistantStream(signal: AbortSignal) {
+    const seq = ++roundSeq // 本轮代次号:finishRound 据此识别过气轮(见 roundSeq 声明注释)
     // 新一轮生成默认跟随到底部(sendMessage 经 addMessage 已设;regenerate/retry 路径在此补设)
     isStickyBottom.value = true
     if (fetchStream) {
@@ -232,11 +238,12 @@ export function useChat(opts: UseChatOptions = {}) {
           if (idx >= 0) state.messages.splice(idx, 1)
         }
       } finally {
-        await finishRound()
+        await finishRound(seq)
         // 流结束清残留确认条(frozen-approval-bar,2026-08-28):流到达 finally 时仍挂起的 approval 定义上已死 ——
         // 主级 approval 会阻塞流本身(工具 await),能走到收口的必是已被 abort 自动拒/子委派超时收口的;
-        // 不清则 ApprovalBar 残留到用户手点(点了也 resolve 到已 settle 的 promise,无害但困惑)
-        pendingApproval.value = null
+        // 不清则 ApprovalBar 残留到用户手点(点了也 resolve 到已 settle 的 promise,无害但困惑)。
+        // seq 守卫:过气轮(编辑重跑后)不得清新轮挂起的确认条(续跑/编辑轮各自的 finally 自清)
+        if (seq === roundSeq) pendingApproval.value = null
       }
       return
     }
@@ -249,7 +256,7 @@ export function useChat(opts: UseChatOptions = {}) {
     } catch (err: any) {
       if (!isAbort(err, signal)) state.error = err.message || '请求失败,请重试'
     } finally {
-      await finishRound()
+      await finishRound(seq)
     }
   }
 
@@ -271,13 +278,17 @@ export function useChat(opts: UseChatOptions = {}) {
     }
   }
 
-  /** 一轮结束收口:持久化 + 关 loading + 排队续跑(生成中用户又发了消息,可能多条 → 依次自动执行,每条是独立后续任务) */
-  async function finishRound() {
+  /** 一轮结束收口:持久化 + 关 loading + 排队续跑(生成中用户又发了消息,可能多条 → 依次自动执行,每条是独立后续任务)。
+   *  seq 代次守卫:过气轮(编辑重跑 stop 旧轮后异步收口途中)不动共享态 —— 否则旧 finally 会拆掉新轮的
+   *  loading/controller、settle 掉新轮真正 running 的步骤;入口 + onPersist 之后各查一次(挂起窗口) */
+  async function finishRound(seq: number) {
+    if (seq !== roundSeq) return
     // 兜底收口遗留 running 步骤(真 LLM 实测发现):子 agent 中途异常(如网络断在 LLM 流上)时,
     // 其 tool_call 子步骤没有配对 tool_result 事件 → status 永停 'running'(UI spinner 永转 + 外部 idle 判定失效)
     settleRunningSteps(state.messages)
     // 持久化当前轮(失败/慢不阻塞排队续跑 —— onPersist 抛错时仍 shift 续跑下一轮,防生成中排队被持久化故障卡死)
     try { await onPersist?.(state.messages) } catch { /* onPersist 抛错忽略,不阻塞续跑 */ }
+    if (seq !== roundSeq) return // onPersist 挂起期间被新轮跨越:后续共享态归新轮管
     state.loading = false
     currentController = null
     // 取队首任务:此时才 addMessage 进 messages(保证它是"最后 user",runAssistantStream 正确定位,不被后续排队任务干扰)
@@ -333,6 +344,34 @@ export function useChat(opts: UseChatOptions = {}) {
     }
     // 需有 user 可重发
     if (!msgs.some((m) => m.role === 'user')) return
+    state.loading = true
+    state.error = null
+    currentController = new AbortController()
+    await runAssistantStream(currentController.signal)
+  }
+
+  /**
+   * 编辑任意位置的 user 消息并从该点重跑:改写 content(保留原 focuses/images/quote 附带字段)→
+   * 截断该消息及之后全部历史 → 重发。生成中调用 = 先 stop()(partial 随截断移除,挂起自动收口)。
+   * 不复用 sendMessage:stop 后旧轮 finally 到达前 loading 短暂为 true,走 sendMessage 会掉排队分支;
+   * 旧轮 finally 由 roundSeq 代次守卫失效,不会拆本轮回设的状态。
+   */
+  async function editAndResend(index: number, newContent: string) {
+    const original = state.messages[index]
+    if (!original || original.role !== 'user') return
+    const hasImages = !!original.images?.length
+    const content = newContent.trim()
+    // 空文本且无图拒绝(纯图消息允许空文本,落回占位符保持图片-only 语义)
+    if (!content && !hasImages) return
+    if (state.loading) stop()
+    // 附带字段保留重发(retry 路径丢字段的补全:焦点/图片/引用随编辑后的消息原样再进历史)
+    const { focuses, images, quote } = original
+    onBeforeRegenerate?.() // 同 regenerate:清子 agent 代码复用缓存,防重跑复用旧工作副本
+    state.messages.splice(index)
+    addMessage('user', content || IMAGE_ONLY_PLACEHOLDER, focuses, images, quote)
+    // 截断即刻落盘:不等新轮完成(finishRound 才持久化)—— 防编辑后、新轮完成前刷新丢掉本次编辑;
+    // 失败不阻塞重跑(后续 finishRound 仍会尝试)
+    try { await onPersist?.(state.messages) } catch { /* 落盘失败忽略,重跑继续 */ }
     state.loading = true
     state.error = null
     currentController = new AbortController()
@@ -397,7 +436,7 @@ export function useChat(opts: UseChatOptions = {}) {
     await sendMessage(content)
   }
 
-  return { state, scrollContainer, pendingApproval, queuedTasks, sendMessage, removeQueuedTask, clearMessages, stop, reset, retry, regenerate, resolveApproval, onScroll, onWheel }
+  return { state, scrollContainer, pendingApproval, queuedTasks, sendMessage, removeQueuedTask, clearMessages, stop, reset, retry, regenerate, editAndResend, resolveApproval, onScroll, onWheel }
 }
 
 /** useChat 返回类型别名(E1 API 面收口:供 types/ 对齐导出;结构 = 上述 return 对象) */

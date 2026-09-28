@@ -16,7 +16,8 @@ import MsgText from '../MsgText.vue'
 defineProps<{ showAvatar: boolean; showTyping: boolean }>()
 
 const ctx = useChatContext()
-const { chat, formatTime, copiedMsg, copyMessage, isPendingAssistant, isReasoningExpanded, toggleReasoning, canUndo, undo, icons, messages: m } = ctx
+// 编辑三方法在 ctx 一级(editQueued 同款归属),不在 chat(useChat)上
+const { chat, formatTime, copiedMsg, copyMessage, isPendingAssistant, isReasoningExpanded, toggleReasoning, canUndo, undo, icons, messages: m, startEdit, submitEdit, cancelEdit } = ctx
 // 滚动容器已上移至 ChatDialog 的 .chat-main(消息 + queued/approval/conflict 统一滚动);
 // 此处只取状态与重试方法
 const { state, retry, regenerate } = chat
@@ -50,6 +51,9 @@ const lastIsAssistant = computed(() => state.messages[state.messages.length - 1]
       @toggle-reasoning="toggleReasoning(idx)"
       @copy="copyMessage(msg.content)"
       @regenerate="regenerate"
+      @edit="startEdit(msg)"
+      @edit-save="submitEdit"
+      @edit-cancel="cancelEdit"
     />
 
     <!-- 加载占位:仅当最后一条不是 assistant 占位时(非流式等待)才单独显示,避免与流式占位叠加成两个 AI 头像 -->

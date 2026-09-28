@@ -516,7 +516,9 @@ test.describe('complex-demo: 组件操作(调换顺序 / 改层级 / 聚焦纯�
     await mockLlm(page, [
       { tool_calls: [{ name: 'load_skill', arguments: { name: 'dom-inspect' } }] },
       { tool_calls: [{ name: 'dom_search', arguments: { query: '复杂页面', mode: 'text', limit: 3 } }] },
-      { tool_calls: [{ name: 'dom_info', arguments: { selector: '.header-title', styles: ['display', 'font-size'] } }] },
+      // dom_info 靶:h1.pr-title 恒在(PageRenderer 恒渲染 title h1;文本可被前序用例 draft 污染,但元素在)。
+      // 原 '.header-title' 是 SDK ChatHeader 的 class —— 4.24.4 起 SDK UI 被 isInsideSdkUi 设计性拒绝
+      { tool_calls: [{ name: 'dom_info', arguments: { selector: 'h1.pr-title', styles: ['display', 'font-size'] } }] },
       { text: '已检视标题元素。' },
     ])
     await fillInput(page, '看看页面标题元素')
@@ -528,10 +530,13 @@ test.describe('complex-demo: 组件操作(调换顺序 / 改层级 / 聚焦纯�
         .map((l: any) => String(l.data?.result ?? ''))
       return { search: pick('dom_search')[0] ?? '', info: pick('dom_info')[0] ?? '' }
     })
-    // 检索:文本命中标题区(叶子优先;文档 <title> 也合法命中,断言存在 header-title 命中即可)
+    // 检索:文本命中标题区(叶子优先)。双靶断言:h1.pr-title(宿主正文标题)或 <title>(index.html 静态)。
+    // ① 4.24.4 起 dom 检索排除 SDK 自身 UI,原断言靶 header-title(ChatHeader 的 class)已被按设计剔除;
+    // ② demo 的 page 变更存 localStorage draft(complex-demo-draft)—— 文件内前序用例改过标题后,
+    //    本用例页面初始 title 不再是「复杂页面 Agent」,h1.pr-title 可能无命中;<title> 恒含 query 文本兜底
     const search = JSON.parse(results.search)
     expect(search.total, 'dom_search 文本模式命中标题文本').toBeGreaterThanOrEqual(1)
-    expect(search.hits.some((h: { selector: string }) => h.selector.includes('header-title')), '命中路径带 class 段(header-title)').toBeTruthy()
+    expect(search.hits.some((h: { selector: string }) => h.selector.includes('pr-title') || h.selector.endsWith('title')), '命中路径带 class/标签段(宿主 h1.pr-title 或 <title>)').toBeTruthy()
     // 检视:真实 getComputedStyle 求值(display/font-size 非空)+ events 字段存在(三源结构)
     const info = JSON.parse(results.info)
     expect(info.styles.display, 'dom_info 计算样式 display 求值').toBeTruthy()

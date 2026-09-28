@@ -394,6 +394,10 @@ export interface DialogMessages {
   copy: string
   copied: string
   regenerate: string
+  edit: string
+  editTitle: string
+  editSave: string
+  editCancel: string
   expand: string
   collapse: string
   noResult: string
@@ -888,6 +892,14 @@ export interface ChatContext {
   send: () => void;
   keydown: (e: KeyboardEvent) => void;
   editQueued: (idx: number) => void;
+  /** 编辑中的 user 消息对象(null=无;对象引用作身份,免疫 index 漂移) */
+  editingMessage: Ref<AgentMessage | null>;
+  /** 进入消息编辑态(生成中自动先 stop;点 B 自动弃 A,单编辑互斥) */
+  startEdit: (msg: AgentMessage) => void;
+  /** 退出编辑态(取消) */
+  cancelEdit: () => void;
+  /** 提交编辑:改写该消息并从该点重跑(保留附带字段,截断其后) */
+  submitEdit: (text: string) => void;
   isPendingAssistant: (idx: number) => boolean;
 }
 export declare const chatContextKey: InjectionKey<ChatContext>;
@@ -945,6 +957,9 @@ export interface UseChatReturn {
   retry(): Promise<void>;
   /** 重新生成最后一轮(onBeforeRegenerate 清复用缓存) */
   regenerate(): Promise<void>;
+  /** 编辑任意位置 user 消息并从该点重跑:改写 content(保留 focuses/images/quote)截断其后重发;
+   *  生成中调用先 stop()(旧轮收口由 roundSeq 代次守卫失效) */
+  editAndResend(index: number, newContent: string): Promise<void>;
   /** 审批响应(true/false 或 RHC 方案 id 字符串) */
   resolveApproval(approved: boolean | string): void;
   /** 滚动绑定(保留给 @scroll;sticky 由 onWheel 管) */

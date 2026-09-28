@@ -105,10 +105,11 @@ export async function run() {
     assert(!bundle.includes('ChatDialog'), 'bundle 不含 ChatDialog')
 
     // 体积断言(headless 实测 ~673KB —— 2026-08-27 html-design-skill 内置 web-design-engineer 后 +216K;
-    // 阈值 790KB 与 tests/size-check.mjs 同口径,防 UI 层意外拉入回归(host-integration-contract 后 ~760KB)
+    // 阈值 800KB 与 tests/size-check.mjs 同口径,防 UI 层意外拉入回归(host-integration-contract 后 ~760KB;
+    // 4.25 edit-and-resend 增 useChat 逻辑 ~1.2KB 抬阈值,改动前 789.2KB 已贴旧阈 790KB)
     const sizeKB = fs.statSync(HEADLESS_DIST).size / 1024
     assert(sizeKB > 100, `bundle 非空有内容(${sizeKB.toFixed(0)}KB)`)
-    assert(sizeKB <= 790, `bundle 体积 ≤ 790KB(实测 ${sizeKB.toFixed(0)}KB;超阈值说明 UI 层被意外拉入)`)
+    assert(sizeKB <= 800, `bundle 体积 ≤ 800KB(实测 ${sizeKB.toFixed(0)}KB;超阈值说明 UI 层被意外拉入)`)
   }
 
   return { pass: ctx.pass, fail: ctx.fail }

@@ -51,6 +51,11 @@ export interface DialogMessages {
   copy: string
   copied: string
   regenerate: string
+  /** 消息编辑(edit-and-resend):user 消息编辑按钮文案/提示/保存/取消 */
+  edit: string
+  editTitle: string
+  editSave: string
+  editCancel: string
   expand: string
   collapse: string
   noResult: string
@@ -297,6 +302,10 @@ export const MESSAGES_ZH_CN: DialogMessages = {
   copy: '复制',
   copied: '已复制',
   regenerate: '重新生成',
+  edit: '编辑',
+  editTitle: '编辑后重发:之后的回复将被移除并重新生成',
+  editSave: '保存并重发',
+  editCancel: '取消',
   expand: '展开',
   collapse: '收起',
   noResult: '(无返回值)',
@@ -534,6 +543,10 @@ export const MESSAGES_EN_US: DialogMessages = {
   copy: 'Copy',
   copied: 'Copied',
   regenerate: 'Regenerate',
+  edit: 'Edit',
+  editTitle: 'Edit & resubmit: replies after it will be removed and regenerated',
+  editSave: 'Save & resubmit',
+  editCancel: 'Cancel',
   expand: 'Expand',
   collapse: 'Collapse',
   noResult: '(no result)',

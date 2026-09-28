@@ -12,9 +12,9 @@ const limits = [
   { file: 'dist/page-agent-sdk.iife.js', max: 2.45 * MB, label: 'IIFE 全量(CDN <script> 直引;含 dompurify + overlayscrollbars + design-skill,实测 ~2206KB)' },
   { file: 'dist/page-agent-sdk.js', max: 1.32 * MB, label: 'ESM(npm import;含 design-skill,实测 ~1194KB)' },
   { file: 'dist/page-agent-sdk.umd.cjs', max: 1.08 * MB, label: 'UMD(require;含 design-skill,实测 ~974KB)' },
-  { file: 'dist/page-agent-sdk.headless.js', max: 790 * KB, label: 'headless ESM(/headless 子路径;纯核心不含 UI/不含 overlayscrollbars,含 design-skill + host-integration-contract S2/S3/S4,实测 ~760KB)' },
+  { file: 'dist/page-agent-sdk.headless.js', max: 800 * KB, label: 'headless ESM(/headless 子路径;纯核心不含 UI/不含 overlayscrollbars,含 design-skill + host-integration-contract S2/S3/S4,实测 ~760KB;4.25 edit-and-resend 增 useChat 逻辑 ~1.2KB 抬阈值)' },
   { file: 'dist/page-agent-sdk.legacy.js', max: 3.55 * MB, label: 'legacy ESM(/legacy 子路径;es2017 全量打包含 anthropic + design-skill,实测 ~3189KB)' },
-  { file: 'dist/style.css', max: 87.5 * KB, label: 'CSS(含 overlayscrollbars 样式 + 3.27 顶部按钮标签 + 4.16 截图缩略图样式,实测 ~85.3KB)' },
+  { file: 'dist/style.css', max: 89 * KB, label: 'CSS(含 overlayscrollbars 样式 + 3.27 顶部按钮标签 + 4.16 截图缩略图样式,实测 ~85.3KB;4.25 edit-and-resend 消息编辑器样式 + overlayscrollbars 刷新至 2.16.0 CSS 后抬阈)' },
 ]
 
 let pass = 0, fail = 0

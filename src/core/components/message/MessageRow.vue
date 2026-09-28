@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { AgentMessage, ToolStep } from '../../types'
+import { IMAGE_ONLY_PLACEHOLDER } from '../../tools/imageInput'
 import { useChatContext } from '../../composables/chatContext'
 import MessageReasoning from './MessageReasoning.vue'
 import MessageSteps from './MessageSteps.vue'
 import MessageBubble from './MessageBubble.vue'
+import MessageEdit from './MessageEdit.vue'
 import MessageTime from './MessageTime.vue'
 import MessageActions from './MessageActions.vue'
 import AvatarIcon from './AvatarIcon.vue'
@@ -30,7 +32,7 @@ const props = defineProps<{
   time: string
 }>()
 
-defineEmits<{ (e: 'toggle-reasoning'): void; (e: 'copy'): void; (e: 'regenerate'): void }>()
+defineEmits<{ (e: 'toggle-reasoning'): void; (e: 'copy'): void; (e: 'regenerate'): void; (e: 'edit'): void; (e: 'edit-save', text: string): void; (e: 'edit-cancel'): void }>()
 
 // chip 展示:历史消息的焦点 chip 纯只读(2026-08-26 用户反馈:历史路径可能已变 —— 如组件被打乱/删除,
 // 点击聚焦/回看会误导;当前焦点的交互(点击/✕)在 ChatInput 输入框 chip 上)
@@ -48,6 +50,13 @@ const steps = computed<ToolStep[]>(() =>
 )
 /** 最后一条 assistant(非生成中)的操作按钮:复制 / 重新生成 */
 const showActions = computed(() => isAssistant.value && !!props.message.content && !props.loading && props.isLast)
+/** user 行编辑按钮:任意位置、生成中也显示(与 assistant 的 isLast/!loading 刻意不同 —— loading 点编辑 = 自动停再改,是需求本体);
+ *  身份比对用消息对象引用(ctx.editingMessage),编辑期间 index 漂移不影响归属 */
+// ctx 是普通对象(非 reactive),嵌套 Ref 不自动解包 —— 比较取 .value(模板侧顶层解构的 ref 才自动解包)
+const isEditing = computed(() => ctx.editingMessage.value === props.message)
+const showUserEdit = computed(() => props.message.role === 'user' && !isEditing.value)
+/** 编辑预填:纯图消息 content 是 IMAGE_ONLY_PLACEHOLDER 占位符,编辑框显示为空(图在上方缩略图,保存时空文本回落占位符) */
+const editInitialValue = computed(() => (props.message.content === IMAGE_ONLY_PLACEHOLDER ? '' : props.message.content))
 /** 流式光标:assistant + 生成中 + 末位 + 有内容 */
 const showCursor = computed(() => isAssistant.value && props.loading && props.isLast && !!props.message.content)
 
@@ -91,9 +100,19 @@ const activeImage = ref<string | undefined>(undefined)
         </button>
       </div>
       <!-- 空气泡抑制:assistant 无内容且非占位态(已有思考块/步骤块反馈)→ 整泡不渲染,
-           修「思考/工具调用期间回复框是空框」+ 步骤后叠加紫色呼吸占位点双 loading -->
+           修「思考/工具调用期间回复框是空框」+ 步骤后叠加紫色呼吸占位点双 loading。
+           user 编辑态:气泡原地换编辑器(上方焦点/引用/图片块保留 = 附带字段天然预览) -->
+      <MessageEdit
+        v-if="isEditing"
+        :initial-value="editInitialValue"
+        :has-images="!!message.images?.length"
+        :loading="loading"
+        :messages="ctx.messages"
+        @save="(text) => $emit('edit-save', text)"
+        @cancel="$emit('edit-cancel')"
+      />
       <MessageBubble
-        v-if="!isAssistant || !!message.content || isPendingAssistant"
+        v-else-if="!isAssistant || !!message.content || isPendingAssistant"
         :messages="ctx.messages"
         :content="message.content"
         :role="message.role"
@@ -102,7 +121,7 @@ const activeImage = ref<string | undefined>(undefined)
         :show-cursor="showCursor"
       />
       <MessageTime :time="time" />
-      <MessageActions v-if="showActions" :messages="ctx.messages" :copied="copied" @copy="$emit('copy')" @regenerate="$emit('regenerate')" />
+      <MessageActions v-if="showActions || showUserEdit" :editable="showUserEdit" :messages="ctx.messages" :copied="copied" @copy="$emit('copy')" @regenerate="$emit('regenerate')" @edit="$emit('edit')" />
     </div>
   </div>
   <!-- 页内大图查看(Teleport body;点缩略图开,遮罩/✕/Esc 关) -->
@@ -134,4 +153,8 @@ const activeImage = ref<string | undefined>(undefined)
 .msg-image-lost { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--cs-surface, #f3f4f6); opacity: 0.6; }
 /* 跨边界:hover message-row.assistant 时显示子组件 MessageActions 的 .msg-actions(后代选择器穿透) */
 .message-row.assistant:hover :deep(.msg-actions) { opacity: 1; }
+/* user 行同款:编辑按钮 hover 显示(编辑器本体常显,不受 hover 影响) */
+.message-row.user:hover :deep(.msg-actions) { opacity: 1; }
+/* 编辑器占满 message-content 宽度(user 侧 message-content 是 align-items:flex-end 的列容器,需拉伸) */
+.message-content > :deep(.msg-edit) { width: 100%; }
 </style>
