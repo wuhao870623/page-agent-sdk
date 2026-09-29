@@ -71,8 +71,13 @@ onMounted(() => {
     // 默认 true:自定义 systemPrompt 末尾用 '---' 分隔线自动追加 reliableWriteRules(改前先 read、字段以 describe 为准、写错看校验错误重试、优先增量 patch);设 false 关闭;不传 systemPrompt 用默认 prompt 时已内置
     appendReliableWriteRules: true,
     // approval 一行同时开启两侧:被动(write 前弹允许/拒绝)+ 主动(request_human_confirmation 默认随附)
-    // ?preview=1 追加 write 审批 diff 预览(ui-quick-wins Q3;默认关,ApprovalBar 结构化 old→new)
-    approval: { tools: ['write'], ...(new URLSearchParams(location.search).get('preview') === '1' ? { preview: true } : {}) },
+    // ?preview=1 追加 write 审批 diff 预览(ui-quick-wins Q3;默认关,ApprovalBar 结构化 old→new);
+    // ?preview=fail 自定义 previewWrite 恒 refuse(4.25.1:refuse 态「允许」按钮禁用,测 ApprovalBar)
+    approval: {
+      tools: ['write'],
+      ...(new URLSearchParams(location.search).get('preview') === '1' ? { preview: true as const } : {}),
+      ...(new URLSearchParams(location.search).get('preview') === 'fail' ? { previewWrite: () => ({ ok: false as const, intent: 'write' as const, items: [], error: '演示:此写入预检失败(refuse 态)' }) } : {}),
+    },
     debug: true,
     dialog: {
       title: '人工确认 · AI 主动征询',

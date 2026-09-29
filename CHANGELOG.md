@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [4.25.1] - 2026-09-29
+
+### Fixed
+
+- **审批预览 refuse 态禁用「允许」按钮 + ⚠ 行容器条件修复**(真机诊断 2026-09-29 驱动):`approval.previewWrite` 返回 `ok:false`(批准前已见必失败,如「没有选中正文」)时,ApprovalBar 此前仅展示 ⚠ 仍可盲批 —— 批准必失败的操作白烧一轮(NO_SELECTION 回灌)。现 refuse 态「允许」禁用(半透明 + not-allowed 光标),「拒绝」是唯一出口,模型据拒绝结果改路;RHC(方案征询)分支不受影响。**连带修 ⚠ 行不可见潜伏缺陷**:preview-error 行嵌在 `v-if="previewItems.length"` 容器内,refuse 态 items 为空 → 容器不渲染 → ⚠ 从 4.24.1 起从未真正显示过(此前无 refuse 态测试故未暴露);容器条件改 `previewItems.length || previewRefused`。browser e2e +1(human-confirm-demo `?preview=fail` 模式:自定义 previewWrite 恒 refuse → preview-error 可见 + allow disabled + 拒绝收口数据未变)。
+- **SCHEMA_STRIP 报错 hint 补声明键集(patch 路径 + 非 ZodObject 整对象路径)**(真机回归 uispec S5 驱动,2026-09-28):模型 append banner 组件猜 `props.title/subtitle`,被 SCHEMA_STRIP 拒后盲猜 heading/subTitle/… 连错 2 轮烧 3× token(5794 vs 基线 1720)—— patch 路径的 `stripError` 与非 ZodObject 路径此前是**裸 hint**(没调 `declaredKeysAt`),模型无键集可依。现四处 SCHEMA_STRIP 全部附「可用字段:…」;另 `declaredKeysAt` 支持 union/骨架联合(此前只认 ZodObject shape):聚合各分支键并集(getSchemaAtPath 下探只取首含分支,单分支键集对其他分支类型不适用,并集更全)。selftest 3817 → **3819**(sec-92 E3:patch strip hint 含键集;F3:union strip hint 含各分支键并集)。
+
+### Changed
+
+- 无(两处均为修复,无行为面新增)。
 ## [4.25.0] - 2026-09-28
 
 ### Fixed

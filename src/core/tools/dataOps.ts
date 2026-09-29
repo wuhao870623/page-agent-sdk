@@ -32,8 +32,22 @@ import {
 function declaredKeysAt(schema: ZodType | undefined, parentJp: string): string[] | null {
   if (!schema) return null
   const sub = parentJp ? getSchemaAtPath(schema, parentJp) : schema
+  if (!sub) return null
+  // ZodObject 直接取 shape;union/骨架联合(多组件 props 常态)没有 shape —— 聚合各分支键并集,
+  // 让模型的字段猜测有据可依(真机实证 2026-09-28:union 节点 hint 为空,模型盲猜 title/subtitle
+  // 连错 2 轮烧 3× token;并集虽非精确分支,「写前对准 type」提示 + 键集已够一轮自纠)
   const shape = (sub as unknown as { shape?: Record<string, unknown> } | null | undefined)?.shape
-  return shape && typeof shape === 'object' ? Object.keys(shape) : null
+  if (shape && typeof shape === 'object') return Object.keys(shape)
+  const options = (sub as unknown as { options?: unknown[] } | null | undefined)?.options
+  if (Array.isArray(options)) {
+    const merged = new Set<string>()
+    for (const opt of options) {
+      const optShape = (opt as { shape?: Record<string, unknown> })?.shape
+      if (optShape && typeof optShape === 'object') for (const k of Object.keys(optShape)) merged.add(k)
+    }
+    return merged.size ? [...merged] : null
+  }
+  return null
 }
 /** 键集建议后缀(截断 12 个防超长;空/null = 无后缀) */
 const keysHintSuffix = (keys: string[] | null): string =>
@@ -239,7 +253,7 @@ export function validateRootValueLocally(args: {
   if (!res.success) return { ok: false, error: zodError('', res.error.issues), notices }
   const stripped = findStrippedKeys(bindRef, value, res.data)
   if (stripped.length) {
-    return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: '该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试', path: stripped[0], details: { stripped } }), notices }
+    return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentPathOf(String(stripped[0]))))}`, path: stripped[0], details: { stripped } }), notices }
   }
   return { ok: true, assembly: res.data, wholeParsed: res.data as Record<string, unknown>, notices }
 }
@@ -331,7 +345,15 @@ export function validateWriteLocally(args: {
     })
   }
   const stripError = (stripped: string[]): string =>
-    toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: '该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试', path: stripped[0], details: { stripped } })
+    toolError({
+      code: 'SCHEMA_STRIP',
+      message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`,
+      // hint 附声明键集(patch 路径此前是裸 hint —— 真机实证 2026-09-28:union props 下模型盲猜
+      // title/subtitle 连错 2 轮烧 3× token;键集让模型一轮自纠)
+      hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentPathOf(String(stripped[0]))))}`,
+      path: stripped[0],
+      details: { stripped },
+    })
   const writeBacks: LocalWriteBack[] = []
   if (schemaHasRefinement(schema)) notices.push('根级 refine/superRefine 不再在 write 时执行(走 capabilities.verify)')
   let appendIdx = 0

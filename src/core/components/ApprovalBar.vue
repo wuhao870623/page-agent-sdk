@@ -40,6 +40,13 @@ const approvalArgsPreview = computed(() => {
 const PREVIEW_MAX_ITEMS = 20
 const previewItems = computed(() => pendingApproval.value?.preview?.items ?? [])
 const previewHasMore = computed(() => previewItems.value.length > PREVIEW_MAX_ITEMS)
+/** 预览 refuse 态(preview.ok=false:批准前已见必失败,如「没有选中正文」):禁用「允许」——
+ *  批准一个必失败的操作没有意义,只会白烧一轮(真机实证 2026-09-29:⚠ 展示仍被盲批,
+ *  批准后 NO_SELECTION 回灌多走一轮)。拒绝是唯一合理出口,模型据拒绝结果改路 */
+const previewRefused = computed(() => {
+  const p = pendingApproval.value?.preview
+  return !!p && p.ok === false
+})
 </script>
 
 <template>
@@ -72,9 +79,10 @@ const previewHasMore = computed(() => previewItems.value.length > PREVIEW_MAX_IT
         </button>
       </div>
       <pre v-if="approvalArgsPreview && approvalArgsExpanded" class="approval-args">{{ approvalArgsPreview }}</pre>
-      <!-- write 审批 diff 预览(ui-quick-wins Q3):结构化 old→new(优于 args 原文 JSON;校验失败态显示 error,批准前即见会被拒的原因) -->
-      <div v-if="previewItems.length" class="approval-preview" data-test="approval-preview">
-        <div v-if="pendingApproval.preview && !pendingApproval.preview.ok" class="preview-error" data-test="preview-error">⚠ {{ pendingApproval.preview.error }}</div>
+      <!-- write 审批 diff 预览(ui-quick-wins Q3):结构化 old→new(优于 args 原文 JSON;校验失败态显示 error,批准前即见会被拒的原因)。
+           容器条件含 previewRefused:refuse 态 items 为空,只按 items.length 挡的话 ⚠ 行永远不可见(4.24.1 起潜伏,4.25.1 refuse 测试暴露) -->
+      <div v-if="previewItems.length || previewRefused" class="approval-preview" data-test="approval-preview">
+        <div v-if="previewRefused" class="preview-error" data-test="preview-error">⚠ {{ pendingApproval.preview.error }}</div>
         <div v-for="(it, i) in previewItems.slice(0, PREVIEW_MAX_ITEMS)" :key="i" class="preview-item" :data-test="`preview-item-${i}`">
           <span class="preview-op">{{ it.op || 'set' }}</span>
           <code class="preview-path">{{ it.jsonPath || '(主数据整体)' }}</code>
@@ -88,7 +96,7 @@ const previewHasMore = computed(() => previewItems.value.length > PREVIEW_MAX_IT
       </div>
       <div class="approval-actions">
         <button class="approval-deny" @click="resolveApproval(false)"><MsgText :text="m.deny" /></button>
-        <button class="approval-allow" @click="resolveApproval(true)"><MsgText :text="m.approve" /></button>
+        <button class="approval-allow" :disabled="previewRefused" data-test="approval-allow" @click="resolveApproval(true)"><MsgText :text="m.approve" /></button>
       </div>
     </template>
   </div>
@@ -123,6 +131,9 @@ const previewHasMore = computed(() => previewItems.value.length > PREVIEW_MAX_IT
 .approval-deny:hover { background: rgba(127, 127, 127, 0.1); color: var(--cs-bg-text); }
 .approval-allow { background: var(--cs-primary); color: #fff; box-shadow: 0 1px 3px rgba(var(--cs-primary-rgb), 0.3); }
 .approval-allow:hover { opacity: 0.92; transform: translateY(-1px); }
+/* 预览 refuse 态:允许禁用(半透明去 hover),拒绝是唯一出口 */
+.approval-allow:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+.approval-allow:disabled:hover { opacity: 0.45; }
 .approval-question { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: var(--cs-bubble-ai, #fff); border: 1px solid rgba(var(--cs-warn-rgb, 217, 119, 6), 0.25); font-size: 13px; color: var(--cs-bg-text); line-height: 1.6; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03); }
 .approval-context { margin: 6px 0 10px; padding: 0 2px; font-size: 12px; color: var(--cs-bg-muted); line-height: 1.6; }
 .approval-recommend { margin: 8px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(var(--cs-primary-rgb), 0.08); border-left: 3px solid var(--cs-primary); font-size: 12px; color: var(--cs-accent, var(--cs-primary)); line-height: 1.6; }

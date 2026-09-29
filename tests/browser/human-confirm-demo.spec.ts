@@ -184,8 +184,27 @@ test.describe('human-confirm-demo: write 审批 diff 预览(ui-quick-wins Q3,?pr
     expect(theme).toBe('fresh-blue')
   })
 
-  test('默认关(? 无参):确认条无预览区(args JSON 兜底呈现)', async ({ page }) => {
-    await page.goto('/examples/human-confirm-demo/')
+  test('预览 refuse 态(?preview=fail):⚠ 可见 + 「允许」禁用(4.25.1,批准必失败操作无意义)', async ({ page }) => {
+    await page.goto('/examples/human-confirm-demo/?preview=fail')
+    await page.waitForSelector('.chat-dialog')
+    await clearChat(page)
+    await mockLlm(page, [
+      { tool_calls: [{ name: 'write', arguments: { value: { theme: 'night-purple' } } }] },
+      { text: '(refuse 态拒绝后收口)' },
+    ])
+    await fillInput(page, '直接切换风格')
+    await clickSend(page)
+    await page.waitForSelector('[data-test="preview-error"]', { timeout: 15_000 })
+    await expect(page.locator('[data-test="preview-error"]')).toContainText('预检失败')
+    // 核心:refuse 态「允许」禁用,「拒绝」是唯一出口(修前 ⚠ 仅展示仍可盲批 → 批准后必失败白烧一轮)
+    await expect(page.locator('[data-test="approval-allow"]')).toBeDisabled()
+    await clickByText(page, '拒绝')
+    await waitForAgentIdle(page)
+    const theme = await page.evaluate(() => (window as any).appConfig.theme)
+    expect(theme).toBe('fresh-blue')
+  })
+
+  test('默认关(? 无参):确认条无预览区(args JSON 兜底呈现)', async ({ page }) => {    await page.goto('/examples/human-confirm-demo/')
     await page.waitForSelector('.chat-dialog')
     await clearChat(page)
     await mockLlm(page, [

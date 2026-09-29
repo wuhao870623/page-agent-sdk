@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3817%20asserts-brightgreen.svg)](#self-tests)
+[![tests](https://img.shields.io/badge/self%20tests-3819%20asserts-brightgreen.svg)](#self-tests)
 
 ---
 
@@ -33,6 +33,7 @@ Starting point for both humans and AI agents (Claude Code / Cursor): find the fe
 | Host-page QA reliability (SPA doc-switch invalidation / no-guessing gate / quote DOM anchor) | `sdk.notifyHostChange({reason})` on route change · page-assertion gate auto-mounted with `domInspect` · quote anchor captured with selections (`setQuote` 3rd arg) · [usage-guide §6.20](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#620-text-selection-quoting--page-qa-page-quote--read_page--pagecontext) |
 | 📡 Auto host-change reporting (4.21+) | `hostWatch: true` — URL change (hashchange/popstate) auto-fires the full notifyHostChange chain, turning "the defense relies on the host remembering to call" into "the defense is automatic"; pushState patch / title watching are opt-in; debounce merging + `ignore` hook; server/headless degrades to a silent no-op (`inspect().hostWatch` reflection). Also: dom_edit/dom_restore landing auto-invalidates prior page reads (default-on) | `hostWatch` |
 | 📝 Content proposals — review & apply (4.22+) | `proposals: { read, onProposal }`: controlled editing for content outside the data slot — `read_content` (base + hash) → `propose_content` (**incremental ops**: literal unique anchors, atomic; tokens scale with the change; base-hash drift rejected) → host diff panel → write-back only on explicit user apply; `sdk.resolveProposal` closes the loop (events + next-turn outcome notice); model has zero write permission, unconfigured = zero registration; `lineDiff/applyProposalOps/hashContent` exported | `proposals` + `sdk.resolveProposal` |
+| ✏️ Edit sent message & rerun (4.25+) | hover any sent user message → "Edit" → edit in-bubble (Enter save / Esc cancel / IME-safe) → history after it is truncated and rerun from that point; focus/image/quote attachments preserved; clicking edit mid-generation auto-stops first; `roundSeq` generation-guard makes the stale round's async teardown a no-op; `useChat.editAndResend(index, newContent)` for programmatic use in custom UI | built-in UI automatic; custom UI via `useChat` |
 | Customize UI (theme / icons / i18n / button labels) | [`DialogConfig` fields](#dialogconfig-fields) · [usage-guide §6.15](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#615-ui-customization--i18n-icons--theme--language--message-overrides-317321) · `examples/i18n-demo` |
 | Sessions / persistence (IndexedDB) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`storage`/`session`) · `examples/page-demo` (`storage:'indexed'` + built-in history dropdown) |
 | Long conversations / big JSON (context & compression) | [usage-guide §6.8](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) · [context-management doc](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md) |

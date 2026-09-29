@@ -106,6 +106,9 @@ export async function run(ctx: TestCtx): Promise<void> {
     // E1:set 声明节点出现未声明新键 → SCHEMA_STRIP(防线平移)
     let r = await invoke(t['write'], { patch: { op: 'set', jsonPath: 'components.0.props', value: { title: 'x', bogus: 1 } } })
     assert(/SCHEMA_STRIP/.test(r) && bind.components[0].props.bogus === undefined, '✓ strip 联动 → 声明节点未声明新键仍拒(fix-silent-strip 平移)')
+    // E3(4.25.1):patch 路径 strip 的 hint 附声明键集 —— 真机实证 2026-09-28:patch 路径此前是
+    // 裸 hint,union props 下模型盲猜 title/subtitle 连错 2 轮烧 3× token;键集让模型一轮自纠
+    assert(/可用字段:\s*title/.test(r), '✓ patch 路径 strip → hint 含「可用字段:title」(声明键集,4.25.1)')
     // E2:开放 record(style)写任意键 → 放行
     r = await invoke(t['write'], { patch: { op: 'set', jsonPath: 'components.0.style.background', value: '"red"' } })
     assert(bind.components[0].style.background === 'red', '✓ 开放节点 → record 任意键放行')
@@ -127,6 +130,10 @@ export async function run(ctx: TestCtx): Promise<void> {
     // F2:两 option 都不接受 → 拒
     r = await invoke(t['write'], { patch: { op: 'set', jsonPath: 'items.0', value: { kind: 'text', num: 'x' } } })
     assert(/SCHEMA_INVALID/.test(r) && bind.items[0].num === 7, '✓ union-tolerant → 全 option 拒仍拒')
+    // F3(4.25.1):union 节点 strip → hint 含各分支键并集(declaredKeysAt 聚合 options;
+    // getSchemaAtPath 下探只取首含分支,单分支键集对其他分支类型不适用,并集更全)
+    r = await invoke(t['write'], { patch: { op: 'set', jsonPath: 'items.0', value: { kind: 'text', text: 'a', bogus: 1 } } })
+    assert(/可用字段:[^\n]*\btext\b/.test(r) && /可用字段:[^\n]*\bnum\b/.test(r), '✓ union strip → hint 含各分支键并集(text+num,4.25.1)')
   }
 
   // ===== G. 整体 set 只校验出现 key + patches 最终态 =====
