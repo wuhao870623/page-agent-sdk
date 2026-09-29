@@ -136,6 +136,29 @@ export async function run(ctx: TestCtx): Promise<void> {
     assert(/可用字段:[^\n]*\btext\b/.test(r) && /可用字段:[^\n]*\bnum\b/.test(r), '✓ union strip → hint 含各分支键并集(text+num,4.25.1)')
   }
 
+  // ===== F4(4.25.2):discriminatedUnion + sample 定界 —— strip hint 按 type 给对应分支键集 =====
+  {
+    // 复刻 pageSchema 形态(discriminatedUnion 'type',各分支 props 键不同):无 sample 时
+    // getSchemaAtPath 下探首含分支,heading 的 {text,level} 会冒充 banner 的提示(S5 二连挂真因)
+    const dschema = z.object({
+      items: z.array(z.discriminatedUnion('type', [
+        z.object({ type: z.literal('banner'), props: z.object({ image: z.string(), link: z.string().optional(), text: z.string().optional() }) }),
+        z.object({ type: z.literal('heading'), props: z.object({ text: z.string(), level: z.number() }) }),
+      ])),
+    })
+    const dbind: any = { items: [{ type: 'heading', props: { text: 't', level: 1 } }] }  // 数组首元素是 heading:sample 取错位(取 clone 首元素)就会 heading 冒充
+    const dt = byName(createDataOps({ schema: dschema, bind: dbind, description: 'd' }))
+    // append banner 组件 + 错字段(title 不在 banner 分支)→ hint 必须是 banner 键集(非 heading 的 text/level)
+    const r = await invoke(dt['write'], { patches: [{ op: 'append', jsonPath: 'items', value: { type: 'banner', props: { image: 'y', title: 'x' } } }] })
+    assert(/SCHEMA_STRIP/.test(r), '✓ F4 前置:append 错字段被 strip 拒')
+    const hintM = r.match(/可用字段:[^)】]*\)/)
+    const hint = hintM ? hintM[0] : ''
+    assert(/image/.test(hint) && !/\blevel\b/.test(hint), `✓ discriminatedUnion strip → hint 按被写 type 给 banner 键集(含 image、无 heading 的 level;实际:${hint})`)
+    // 负例:非对象 sample(缺 type)→ 原顺序兜底不炸
+    const r2 = await invoke(dt['write'], { patches: [{ op: 'append', jsonPath: 'items', value: { props: { bogus: 1 } } }] })
+    assert(/SCHEMA_(STRIP|INVALID)/.test(r2), '✓ 无判别值的元素 → hint 兜底(首含分支/并集)不炸')
+  }
+
   // ===== G. 整体 set 只校验出现 key + patches 最终态 =====
   {
     const schema = z.object({ title: z.string(), count: z.number().int() })

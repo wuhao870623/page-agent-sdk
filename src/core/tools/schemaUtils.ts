@@ -81,6 +81,18 @@ export function unwrapSchema(schema: any): any {
 
 /** 按 jsonPath 逐级定位子 schema(支持 ZodObject.shape / ZodArray.element / record 下探 valueType / any·unknown 全开放;union 下探含该字段的 option) */
 export function getSchemaAtPath(schema: ZodType, jsonPath: string): ZodType | null {
+  return getSchemaAtPathWithSample(schema, jsonPath)
+}
+
+/**
+ * 同 getSchemaAtPath,但 union/discriminatedUnion 处可用 **sample(该层的数据值)按判别字段选分支**:
+ * discriminatedUnion 下探「首个声明了该字段的 option」在多组件形态下会取错分支(heading 的 props
+ * 键集被当成 banner 的提示给模型 —— 2026-09-29 uispec S5 实证:hint 给 text/level,模型被引向
+ * 错误类型,连错 2 轮)。sample 存在时:读 sample[discriminator](discriminatedUnion 取 _def.discriminator,
+ * 默认 'type')→ 匹配 option 提到队首;无 sample/无匹配 → 原行为(首含分支)。sample 随下探逐段收窄。
+ * 现有调用零破坏(sample 缺省 undefined = 原行为)。
+ */
+export function getSchemaAtPathWithSample(schema: ZodType, jsonPath: string, sample?: unknown): ZodType | null {
   if (!jsonPath) return schema
   let s: any = unwrapSchema(schema)
   const segs = jsonPath.split('.')
@@ -92,18 +104,22 @@ export function getSchemaAtPath(schema: ZodType, jsonPath: string): ZodType | nu
       // ZodObject:取 shape[seg](seg 是字段名)
       const shape = typeof s.shape === 'function' ? s.shape() : s.shape
       s = shape[seg]
+      sample = (sample as Record<string, unknown> | null | undefined)?.[seg]
     } else if (s && (s._def?.type === 'array' || s.constructor?.name === 'ZodArray')) {
       // ZodArray:严格判(_def.type === 'array' 字符串相等);seg 须非负整数索引(同 isPathAllowed P1-20),否则返 null
       if (!/^\d+$/.test(seg)) return null
       s = s.element
+      sample = Array.isArray(sample) ? sample[Number(seg)] : undefined
     } else if (s && (s._def?.type === 'union' || s._def?.type === 'discriminatedUnion' || Array.isArray(s.options))) {
       // discriminatedUnion/ZodUnion:静态不知具体 option → 下探各 option 中声明了该字段者
       // (嵌套容器场景:components.N.children 在 card/waterfall/carousel option 内声明,button 无)。
       // 命中任一 option 即续走其分支(多 option 同名字段通常同构递归 children,取首个);
       // 全不命中(字段不存在于任何 option)→ 返 null(focus 校验据此拒绝,schema_data 降级到上层)。
       const rest = segs.slice(i).join('.')
-      const hits = (s.options ?? [])
-        .map((opt: any) => getSchemaAtPath(opt, rest))
+      // sample 定界(4.25.1):按判别字段值把匹配 option 提到队首 —— 无 sample/判别值/匹配时原样
+      const ordered = orderUnionOptionsBySample(s, sample)
+      const hits = ordered
+        .map((opt: any) => getSchemaAtPathWithSample(opt, rest, sample))
         .filter((x: any) => x != null)
       return hits.length ? hits[0] : null
     } else if (s && s._def?.type === 'record') {
@@ -117,6 +133,27 @@ export function getSchemaAtPath(schema: ZodType, jsonPath: string): ZodType | nu
     }
   }
   return s ?? null
+}
+
+/** union 分支按 sample 判别值重排:discriminatedUnion 读 _def.discriminator(缺省 'type');
+ *  匹配(option 的判别 literal 含该值)→ 提到队首;无 sample/无判别值/无匹配 → 原顺序 */
+function orderUnionOptionsBySample(unionSchema: any, sample: unknown): any[] {
+  const options: any[] = unionSchema?.options ?? []
+  if (!options.length || !sample || typeof sample !== 'object') return options
+  const disc = unionSchema._def?.discriminator ?? 'type'
+  const dv = (sample as Record<string, unknown>)[disc]
+  if (dv === undefined || dv === null) return options
+  const litValues = (o: any): unknown[] => {
+    const lit: any = unwrapSchema(o?.shape?.[disc] ?? o)
+    if (!lit) return []
+    // zod4:ZodLiteral.values 是 Set 且 _def 不带 value;zod3 反之 —— 兼容取
+    if (lit.values instanceof Set) return [...lit.values]
+    if (Array.isArray(lit.values)) return lit.values
+    if (lit.value !== undefined) return [lit.value]
+    return lit._def?.value !== undefined ? [lit._def.value] : []
+  }
+  const match = options.find((o) => litValues(o).includes(dv))
+  return match ? [match, ...options.filter((o) => o !== match)] : options
 }
 
 // ============ path-scoped-validation:校验侧路径解析(union-tolerant)============

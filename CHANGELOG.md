@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [4.25.2] - 2026-09-29
+
+### Fixed
+
+- **SCHEMA_STRIP 键集 hint 按被写数据的判别值选 union 分支**(4.25.1 修复不彻底,uispec S5 复跑二连挂驱动):4.25.1 补的 hint 在 discriminatedUnion(多组件 props 常态,如 pageSchema 37 种组件)下给的是**首个含该字段分支的键集** —— append banner 组件提示「可用字段:text, level」(heading 分支的),模型被引向错误类型比盲猜更糟。三层修:① `getSchemaAtPathWithSample`(新导出,`getSchemaAtPath` 加 sample 的同型变体,现有调用零破坏)—— union 处按 sample 的判别字段值把匹配 option 提到队首(zod4 的 `ZodLiteral.values` 是 **Set**、zod3 是数组/`_def.value`,兼容取);② `declaredKeysAt` 加 sample 参透传;③ 四处 SCHEMA_STRIP 点供给 sample:append 传**新元素**(wrapPathValue 构造与绝对路径同构的嵌套容器 —— clone 里此刻还没有新元素,取 clone 会拿到数组旧首元素,正是 heading 冒充 banner 的来源)、merge/set 传终态值、整对象路径传 value/bind。selftest 3819 → **3822**(sec-92 F4:discriminatedUnion 复刻 pageSchema 形态 —— 数组首元素故意放 heading,append banner 错字段 → hint 必含 image 且无 level;负例无判别值兜底不炸)。
 ## [4.25.1] - 2026-09-29
 
 ### Fixed

@@ -29,9 +29,11 @@ import {
 
 // ===== C2 错误即向导 · 写侧键集建议(tool-call-economy,3.44.x)=====
 /** schema 声明键集(开放节点/取不到返回 null —— 不回落 bind,未声明键名不因报错泄露;与 read 深投影同口径) */
-function declaredKeysAt(schema: ZodType | undefined, parentJp: string): string[] | null {
+function declaredKeysAt(schema: ZodType | undefined, parentJp: string, sample?: unknown): string[] | null {
   if (!schema) return null
-  const sub = parentJp ? getSchemaAtPath(schema, parentJp) : schema
+  // sample(该层被写数据值)随下探传给 getSchemaAtPathWithSample:union 处按判别字段(type 等)
+  // 选分支 —— 缺省下探「首含分支」会把 heading 的 props 键集当成 banner 的提示(2026-09-29 S5 实证)
+  const sub = parentJp ? getSchemaAtPathWithSample(schema, parentJp, sample) : schema
   if (!sub) return null
   // ZodObject 直接取 shape;union/骨架联合(多组件 props 常态)没有 shape —— 聚合各分支键并集,
   // 让模型的字段猜测有据可依(真机实证 2026-09-28:union 节点 hint 为空,模型盲猜 title/subtitle
@@ -56,7 +58,7 @@ const keysHintSuffix = (keys: string[] | null): string =>
 const parentPathOf = (jp: string): string => (/[.[]/.test(jp) ? jp.replace(/[.[][^.[]*$/, '') : '')
 
 import {
-  getSchemaTopKeys, isPathAllowed, getSchemaAtPath, projectBySchemaDeep, describeSchemaNode, extendSchemaWithPgId,
+  getSchemaTopKeys, isPathAllowed, getSchemaAtPath, getSchemaAtPathWithSample, projectBySchemaDeep, describeSchemaNode, extendSchemaWithPgId,
   validateAtPath, resolveSchemaPath, schemaHasRefinement, arrayMinLength, elementSchemaCandidates,
 } from './schemaUtils'
 import type { VfsStore } from '../backends/vfs'
@@ -233,7 +235,7 @@ export function validateRootValueLocally(args: {
           // 键不在 schema 声明:bind 已有 → 宿主自管字段,跳过保留原值(与旧 strip+safeMerge 行为一致);
           // bind 没有 → 本次新增未声明键 → 拒(fix-silent-strip)
           if (k in beforeObj) continue
-          return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${k} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, ''))}`, path: k, details: { stripped: [k] } }), notices }
+          return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${k} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, '', k in src ? src[k] : undefined))}`, path: k, details: { stripped: [k] } }), notices }
         }
         return { ok: false, error: zodError(k, vr.issues ?? []), notices }
       }
@@ -241,7 +243,11 @@ export function validateRootValueLocally(args: {
       // per-key strip 检测(值内新增的未声明嵌套键)
       const stripped = findStrippedKeys(beforeObj[k], v, vr.data, k)
       if (stripped.length) {
-        return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentPathOf(String(stripped[0]))))}`, path: stripped[0], details: { stripped } }), notices }
+        const parentJp = parentPathOf(String(stripped[0]))
+        // sample:stripped 是以 k 为根的绝对路径,v/vr.data 是 k 子树 → 按相对段取(判别字段 type 在新旧值里都在,双保险)
+        const relJp = parentJp === k ? '' : parentJp.startsWith(k + '.') ? parentJp.slice(k.length + 1) : null
+        const sample = relJp === null ? undefined : (getByPath(v as any, relJp) ?? getByPath(beforeObj[k] as any, relJp))
+        return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentJp, sample))}`, path: stripped[0], details: { stripped } }), notices }
       }
       parsedKeys[k] = vr.data
     }
@@ -253,7 +259,8 @@ export function validateRootValueLocally(args: {
   if (!res.success) return { ok: false, error: zodError('', res.error.issues), notices }
   const stripped = findStrippedKeys(bindRef, value, res.data)
   if (stripped.length) {
-    return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentPathOf(String(stripped[0]))))}`, path: stripped[0], details: { stripped } }), notices }
+    const parentJp = parentPathOf(String(stripped[0]))
+    return { ok: false, error: toolError({ code: 'SCHEMA_STRIP', message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`, hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentJp, getByPath(value as any, parentJp) ?? getByPath(bindRef as any, parentJp)))}`, path: stripped[0], details: { stripped } }), notices }
   }
   return { ok: true, assembly: res.data, wholeParsed: res.data as Record<string, unknown>, notices }
 }
@@ -344,16 +351,32 @@ export function validateWriteLocally(args: {
       details: formatZodIssues(issues),
     })
   }
-  const stripError = (stripped: string[]): string =>
-    toolError({
+  /** 把值包装成与绝对路径同构的嵌套容器:{components: elems} 形态 —— getSchemaAtPathWithSample
+   *  按路径段下探取 sample,elems 数组直接传会因首段 'components' 不在数组上而失效(append 场景) */
+  const wrapPathValue = (jp: string, v: unknown): any => {
+    if (!jp) return v
+    const segs = jp.split('.')
+    let cur: any = v
+    for (let i = segs.length - 1; i >= 0; i--) {
+      cur = /^\d+$/.test(segs[i]) ? (() => { const a: unknown[] = []; a[Number(segs[i])] = cur; return a })() : { [segs[i]]: cur }
+    }
+    return cur
+  }
+  const stripError = (stripped: string[], sample?: unknown): string => {
+    const parentJp = parentPathOf(String(stripped[0]))
+    // sample 由调用点供:append 传 elems(新元素按其序号 ei 定位 —— clone 里此刻还没有新元素,
+    // 取 clone 会拿到数组旧首元素,union 选错分支 heading 冒充 banner 的事故正是这么来的);
+    // merge/set 类传终态值。getSchemaAtPathWithSample 在 array 段按 stripped 的索引取位
+    return toolError({
       code: 'SCHEMA_STRIP',
       message: `字段 ${stripped.join(', ')} 不在 schema 声明内,写入被拒绝(防静默丢失)`,
       // hint 附声明键集(patch 路径此前是裸 hint —— 真机实证 2026-09-28:union props 下模型盲猜
       // title/subtitle 连错 2 轮烧 3× token;键集让模型一轮自纠)
-      hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentPathOf(String(stripped[0]))))}`,
+      hint: `该数据结构不支持这些字段;请只用 schema 声明的字段,或在 data.schema 中声明后重试${keysHintSuffix(declaredKeysAt(schema, parentJp, sample))}`,
       path: stripped[0],
       details: { stripped },
     })
+  }
   const writeBacks: LocalWriteBack[] = []
   if (schemaHasRefinement(schema)) notices.push('根级 refine/superRefine 不再在 write 时执行(走 capabilities.verify)')
   let appendIdx = 0
@@ -421,7 +444,7 @@ export function validateWriteLocally(args: {
       if (typeof curStr === 'string' && typeof elems[0] === 'string') {
         const chunk = elems[0] as string
         const tresS = resolveSchemaPath(schema, jp)
-        if (tresS.kind === 'missing') return { ok: false, error: stripError([jp]), writeBacks: [], notices }
+        if (tresS.kind === 'missing') return { ok: false, error: stripError([jp], getByPath(clone, parentPathOf(jp))), writeBacks: [], notices }
         const finalStr = curStr
         if (tresS.kind !== 'open') {
           const bad = tresS.schemas.map((sc) => sc.safeParse(finalStr)).find((r) => !r.success)
@@ -433,7 +456,7 @@ export function validateWriteLocally(args: {
       if (!elems.length) { writeBacks.push({ op: 'appendElems', jp, elems: [] }); continue }
       const tres = resolveSchemaPath(schema, jp)
       if (tres.kind === 'missing') {
-        return { ok: false, error: stripError([jp || '(根)']), writeBacks: [], notices }
+        return { ok: false, error: stripError([jp || '(根)'], jp ? getByPath(clone, parentPathOf(jp)) : clone), writeBacks: [], notices }
       }
       if (tres.kind === 'open') {
         notices.push(`${jp || '(根)'}=开放节点放行`)
@@ -459,7 +482,7 @@ export function validateWriteLocally(args: {
         }
         if (!passed) return { ok: false, error: mkError(`${jp || '(根)'}[新增元素${ei}]`, allIssues), writeBacks: [], notices }
         const stripped = findStrippedKeys(undefined, elems[ei], parsed, jp ? `${jp}.${ei}` : String(ei))
-        if (stripped.length) return { ok: false, error: stripError(stripped), writeBacks: [], notices }
+        if (stripped.length) return { ok: false, error: stripError(stripped, wrapPathValue(jp, elems)), writeBacks: [], notices }
         parsedElems.push(parsed)
       }
       writeBacks.push({ op: 'appendElems', jp, elems: parsedElems })
@@ -486,7 +509,7 @@ export function validateWriteLocally(args: {
         if (!vr.ok) {
           if (vr.resolution === 'missing') {
             const beforeHas = getByPath(bindRef, keyPath) !== undefined
-            if (!beforeHas) return { ok: false, error: stripError([keyPath]), writeBacks: [], notices }
+            if (!beforeHas) return { ok: false, error: stripError([keyPath], valueAt(parentPathOf(keyPath))), writeBacks: [], notices }
             entries.push([k, finalVal])  // 宿主自管字段:保留原值语义(写回最终值,不 strip)
             continue
           }
@@ -495,7 +518,7 @@ export function validateWriteLocally(args: {
         if (vr.resolution === 'open') notices.push(`${keyPath}=开放节点放行`)
         const beforeVal = getByPath(bindRef, keyPath)
         const stripped = findStrippedKeys(beforeVal, finalVal, vr.data, keyPath)
-        if (stripped.length) return { ok: false, error: stripError(stripped), writeBacks: [], notices }
+        if (stripped.length) return { ok: false, error: stripError(stripped, valueAt(parentPathOf(keyPath))), writeBacks: [], notices }
         entries.push([k, vr.data])
       }
       writeBacks.push({ op: 'mergeKeys', jp, entries })
