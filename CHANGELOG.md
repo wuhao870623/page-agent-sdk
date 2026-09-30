@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [4.25.3] - 2026-09-30
+
+### Fixed
+
+- **聊天框滚动时偶发闪白(滚动层缺底色)**:`.chat-main` / `.chat-scroll-viewport` 此前与 contents 三层全透明,对话框里整个可见底只由 4 层之上的 `.chat-dialog`(`--cs-bg`)提供 —— 滚动中合成层尚未光栅化时 checkerboard 无色可填,露出浏览器底白;深色主题下白块尤其刺眼(learning 门户实报)。两层补 `background-color: inherit`(继承而非写死 `var(--cs-bg)`:集成方把 `.chat-dialog` 改透明/换色时滚动层跟随,不新增视觉面)。视觉零变化;`tests/browser/scrollbar.spec.ts` 钉三层同色且非透明防当冗余优化掉。**复现说明**:自动化未能复现(Chromium 151 / 本机 Chrome 154 / dPR2 + 悬停扫动 共 ~1300 帧逐帧测亮度无亮帧,750 帧 rAF 采样背景色恒为 `rgb(34,34,34)`),属 raster/合成时序类间歇现象,修复依据为可测量的结构弱点(三层透明)与合成层背景的通用缓解手段,待集成方实机复验。
+
 ## [4.25.2] - 2026-09-29
 
 ### Fixed

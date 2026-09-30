@@ -523,8 +523,13 @@ function onResizeKey(e: KeyboardEvent): void {
    host(.chat-main)承载 os 初始化;滚动发生在 viewport(.chat-scroll-viewport)。
    overflow-x hidden:横向滚动收敛到内容内部(代码块/表格各自 overflow-x:auto)—— 对话框级不出现横向滚动条;
    插件初始化前 viewport 也有原生滚动兜底(初始化后由插件接管样式) */
-.chat-main { flex: 1; min-height: 0; }
-.chat-scroll-viewport { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+/* 滚动层自带底色(闪白修复,2026-09-30 learning 实报「聊天框上下滑动偶发闪白」):
+   此前 host/viewport/contents 三层全透明,整个可见底只由 4 层之上的 .chat-dialog 提供 ——
+   滚动中合成层未光栅化时(或父背景未并入该层),checkerboard 无色可填 → 露出浏览器底白。
+   自带 background-color 后未就绪的 tile 填对话框色。inherit 而非写死 var(--cs-bg):
+   集成方若把 .chat-dialog 改透明/换色,滚动层跟随,不产生新的视觉面。 */
+.chat-main { flex: 1; min-height: 0; background-color: inherit; }
+.chat-scroll-viewport { height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background-color: inherit; }
 
 /* ===== 滚动条统一(3.27)=====
    ① 主滚动区(.chat-main,JS 已初始化 OverlayScrollbars):overlay 自定义滚动条,手柄颜色经 --cs-scrollbar-* 跟随主题

@@ -1,66 +1,76 @@
 {
-  "recordedAt": "2026-09-19T10:41:48.741Z",
+  "recordedAt": "2026-09-29T07:36:28.378Z",
   "suites": {
     "uispec": {
       "S1": {
-        "prompt": 26546,
-        "completion": 1338,
+        "prompt": 59922,
+        "completion": 1562,
         "toolCount": 3,
-        "elapsedSec": 208
+        "elapsedSec": 221,
+        "cacheRead": 45952
       },
       "S2": {
-        "prompt": 36756,
-        "completion": 1339,
-        "toolCount": 4,
-        "elapsedSec": 135
+        "prompt": 81395,
+        "completion": 2906,
+        "toolCount": 5,
+        "elapsedSec": 143,
+        "cacheRead": 78336
       },
       "S3": {
-        "prompt": 36469,
-        "completion": 1449,
-        "toolCount": 3,
-        "elapsedSec": 133
+        "prompt": 119642,
+        "completion": 3600,
+        "toolCount": 8,
+        "elapsedSec": 118,
+        "cacheRead": 94208
       },
       "S4": {
-        "prompt": 39581,
-        "completion": 335,
-        "toolCount": 2,
-        "elapsedSec": 105
+        "prompt": 63383,
+        "completion": 425,
+        "toolCount": 3,
+        "elapsedSec": 100,
+        "cacheRead": 30592
       },
       "S5": {
-        "prompt": 85281,
-        "completion": 1720,
-        "toolCount": 6,
-        "elapsedSec": 160
+        "prompt": 146304,
+        "completion": 3984,
+        "toolCount": 8,
+        "elapsedSec": 118,
+        "cacheRead": 115584
       },
       "S6": {
-        "prompt": 32505,
-        "completion": 431,
-        "toolCount": 2,
-        "elapsedSec": 105
+        "prompt": 83639,
+        "completion": 807,
+        "toolCount": 4,
+        "elapsedSec": 103,
+        "cacheRead": 58624
       },
       "S7": {
-        "prompt": 61301,
-        "completion": 4821,
-        "toolCount": 7,
-        "elapsedSec": 198
+        "prompt": 139926,
+        "completion": 3530,
+        "toolCount": 10,
+        "elapsedSec": 148,
+        "cacheRead": 44672
       },
       "S8": {
-        "prompt": 84836,
-        "completion": 2174,
-        "toolCount": 7,
-        "elapsedSec": 136
+        "prompt": 262383,
+        "completion": 5430,
+        "toolCount": 11,
+        "elapsedSec": 130,
+        "cacheRead": 127232
       },
       "S9": {
-        "prompt": 36602,
-        "completion": 517,
-        "toolCount": 3,
-        "elapsedSec": 108
+        "prompt": 36384,
+        "completion": 446,
+        "toolCount": 2,
+        "elapsedSec": 100,
+        "cacheRead": 22656
       },
       "S10": {
-        "prompt": 18220,
-        "completion": 3025,
-        "toolCount": 1,
-        "elapsedSec": 188
+        "prompt": 54072,
+        "completion": 18348,
+        "toolCount": 4,
+        "elapsedSec": 185,
+        "cacheRead": 51840
       }
     },
     "rag": {
@@ -91,98 +101,113 @@
     },
     "parallel": {
       "ALL": {
-        "prompt": 131683,
-        "completion": 3892,
-        "toolCount": 49,
-        "elapsedSec": 674,
-        "cacheRead": 35840
+        "prompt": 135847,
+        "completion": 5379,
+        "toolCount": 31,
+        "elapsedSec": 183,
+        "cacheRead": 63744
       }
     },
     "docs-qa": {
       "S1": {
-        "prompt": 17049,
-        "completion": 793,
+        "prompt": 15432,
+        "completion": 753,
         "toolCount": 1,
-        "elapsedSec": 111,
-        "cacheRead": 13568
+        "elapsedSec": 100,
+        "cacheRead": 7424
       },
       "S2": {
-        "prompt": 17977,
-        "completion": 872,
+        "prompt": 16438,
+        "completion": 1018,
         "toolCount": 1,
-        "elapsedSec": 113
+        "elapsedSec": 100,
+        "cacheRead": 14208
       },
       "S3": {
-        "prompt": 28958,
-        "completion": 558,
-        "toolCount": 1,
-        "elapsedSec": 110,
-        "cacheRead": 23808
+        "prompt": 40768,
+        "completion": 880,
+        "toolCount": 4,
+        "elapsedSec": 103,
+        "cacheRead": 34304
       },
       "S4": {
-        "prompt": 20251,
-        "completion": 901,
+        "prompt": 20298,
+        "completion": 1339,
         "toolCount": 1,
-        "elapsedSec": 108,
-        "cacheRead": 512
+        "elapsedSec": 105,
+        "cacheRead": 10496
+      },
+      "S5": {
+        "prompt": 22267,
+        "completion": 735,
+        "toolCount": 2,
+        "elapsedSec": 100,
+        "cacheRead": 11520
+      },
+      "S6": {
+        "prompt": 10761,
+        "completion": 689,
+        "toolCount": 0,
+        "elapsedSec": 100,
+        "cacheRead": 8832
       }
     },
     "proposals": {
       "S1": {
-        "prompt": 18748,
-        "completion": 323,
+        "prompt": 16384,
+        "completion": 373,
         "toolCount": 2,
-        "elapsedSec": 103,
-        "cacheRead": 7168
+        "elapsedSec": 100,
+        "cacheRead": 10624
       },
       "S2": {
-        "prompt": 20406,
-        "completion": 597,
+        "prompt": 18703,
+        "completion": 762,
         "toolCount": 2,
-        "elapsedSec": 105,
-        "cacheRead": 7168
+        "elapsedSec": 102,
+        "cacheRead": 13056
       },
       "S3": {
-        "prompt": 26699,
-        "completion": 1013,
+        "prompt": 18184,
+        "completion": 783,
         "toolCount": 2,
-        "elapsedSec": 180,
-        "cacheRead": 7168
+        "elapsedSec": 103,
+        "cacheRead": 12800
       },
       "S4": {
-        "prompt": 20681,
-        "completion": 937,
-        "toolCount": 2,
-        "elapsedSec": 190,
-        "cacheRead": 7168
-      },
-      "S5": {
-        "prompt": 28316,
-        "completion": 881,
-        "toolCount": 2,
-        "elapsedSec": 113,
-        "cacheRead": 8192
-      },
-      "S6": {
-        "prompt": 30036,
-        "completion": 880,
-        "toolCount": 2,
-        "elapsedSec": 113,
-        "cacheRead": 14080
-      },
-      "S7": {
-        "prompt": 23599,
-        "completion": 784,
+        "prompt": 19666,
+        "completion": 1373,
         "toolCount": 2,
         "elapsedSec": 105,
-        "cacheRead": 8576
+        "cacheRead": 14080
+      },
+      "S5": {
+        "prompt": 18949,
+        "completion": 354,
+        "toolCount": 2,
+        "elapsedSec": 100,
+        "cacheRead": 13056
+      },
+      "S6": {
+        "prompt": 12719,
+        "completion": 281,
+        "toolCount": 1,
+        "elapsedSec": 100,
+        "cacheRead": 7040
+      },
+      "S7": {
+        "prompt": 19961,
+        "completion": 611,
+        "toolCount": 2,
+        "elapsedSec": 103,
+        "cacheRead": 18304
       },
       "S8": {
-        "prompt": 8354,
-        "completion": 407,
-        "toolCount": 0,
-        "elapsedSec": 102,
-        "cacheRead": 1024
+        "prompt": 13816,
+        "completion": 516,
+        "toolCount": 1,
+        "elapsedSec": 100,
+        "cacheRead": 7552
       }
     }
   }

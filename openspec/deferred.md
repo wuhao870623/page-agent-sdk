@@ -731,3 +731,15 @@ A3 曾写「116 个模块」,实测 sec-*.ts = **115**(runner import 同数)—�
 
 - **SelectionMenu 定位尺寸硬编码**(`MENU_SIZE = {w:128,h:30}`,SelectionMenu.vue:28):视口钳制按组件内常量估算,**宿主通过 CSS 覆盖把按钮改大/改小后**,贴近视口边缘划词时菜单可能溢出几像素(无显示后实测 `getBoundingClientRect`)。暂缓理由 = 修法要动一次渲染时序(v-show → nextTick 实测 → 重定位),有首帧跳位风险,而溢出量小(几像素级)且仅边缘划词可触发;重启触发 = 宿主报告明显的边缘遮挡,或 selectionMenu 迎来第二次定位相关改动时顺手实测化。
 - **selectionMenu 三处扩展面**(菜单项/actions 配置面、`❝` 图标走 `dialog.icons` 通道、`onSelectionQuote` 对外回调):现状 = 菜单项固定一项、图标写死模板、回调仅 mountChatDialog 内部接线,已在 usage-guide §6.20「当前边界」明示;暂缓理由 = 单一集成方(learning 门户)已用「文案 i18n + 样式覆盖 + 自建路线」三层满足需求,扩配置面违背「不出让用户疑惑的配置项」;重启触发 = 第二个集成方需要多项菜单(如「翻译/解释/引用」),届时评估 `selectionMenu: { actions?: [...] }` 加法面。
+
+## 2026-09-29(learning 真机诊断走查残项)
+
+> 来源:learning 门户 `exportDiagnostics` 真机诊断(2026-09-29T08:49)分析时评估的 SDK 侧候选。同诊断挖出的宿主 bug(proposals 裁决回传 `proposalId` 未声明 ReferenceError 被空 catch 吞)已在 learning 侧修复,SDK 侧行为全部正常(pending 状态如实反映未收到裁决)。
+
+### [2026-09-29] read_page 宿主排除钩子(excludeSelectors)— ⏸ 暂缓(噪音量小)
+
+**现状基础**:read_page 智能定位 article/main/[role=main]/.content 容器,只排除 SDK 自身 DOM 与 script/style(`domTool.ts` 工具描述明示);宿主 UI 面板落在定位容器内即被读进正文 —— learning 实证(2026-09-29 诊断 T1):「我的知识点摘要/写摘要」面板文字混进 read_page 首段(~60 字/页)。任何带侧栏/摘要卡的文档站集成都会遇到同款。**候选形态**:`domInspect` 配置组加 `excludeSelectors?: string[]`,或约定 data 属性(如 `data-pg-chrome`)宿主标 chrome 免配置(后者的取舍:零配置但引入隐式契约,前者显式但多一个配置项)。**暂缓理由**:当前噪音量级小(~60 字),单一集成方、无回答质量损害实例;机制虽简单但需过 d.ts 双侧 + usage-guide + browser e2e 全链。**重启触发**:第二个集成方文档站带侧栏/摘要卡且 read_page 噪音实际影响回答(误引 UI 文案作正文断言),或单页噪音 >500 字级。
+
+### [2026-09-29] workingMemory 扩展到页面读工具(防同话题追问重复检索)— ❌ 否决(服从率存疑 + 方向风险)
+
+**评估结论**:learning 真机诊断(2026-09-29)实证「同话题追问重复检索」浪费(T4 与 T3 同查询重跑 `dom_search` + `read_page`,+2 轮;T1 已读全文在历史、T3 已 get_dom §3.2 表格的前提下)。候选 = `CAPTURE_TOOLS`(现仅 `read/query_data/search_data`,workingMemory.ts:21)扩到 `read_page/dom_search/dom_info/get_dom`,注入「近期已读 + 无失效通知」事实提示。否决三条:① **服从率存疑** —— flash 对同类文本提示服从率低(learning prompt 已有「已读过的内容直接用,不必再读页面」,T4 照读),SDK 再加一段大概率同样结局;② **方向风险** —— 同诊断里页面 mid-session 被提案 apply 悄悄改过(§11.1 上线),T3/T4 的重读恰好保证答案新鲜;SDK 只能诚实陈述「读过什么、何时」,**说不了「页面没变」**(notifyHostChange 漏报是常态风险,往「信历史」推会放大此类错误);③ **成本收益不匹配** —— 2 轮 flash ≈ +3~6s、前缀缓存命中、token 增量小,不满足「真机实证驱动机制化」门槛。**重启触发**:真机基线(docs-qa/uispec)显示重复检索成为轮次/token 成本主因 —— 届时优先把失效信号做准(「须重读」在页面真变时必然出现),而非加提示;`--baseline-diff` 的 toolCount 维度可直接量化这类改动的效果。

@@ -21,6 +21,16 @@ test.describe('滚动条优化(OverlayScrollbars + 细条兜底)', () => {
     // 小滚动区兜底:细滚动条继承属性(Firefox/Chromium121+)
     const sw = await page.locator('.chat-dialog').evaluate((el) => getComputedStyle(el).scrollbarWidth)
     expect(sw).toBe('thin')
+    // 滚动层自带底色(闪白修复 2026-09-30,learning 实报「上下滑动偶发闪白」):
+    // .chat-main / .chat-scroll-viewport 此前全透明,可见底只由 4 层之上的 .chat-dialog 提供 ——
+    // 滚动中合成层未光栅化时 checkerboard 无色可填 → 露浏览器底白。三层必须同色且非透明。
+    const bgs = await page.evaluate(() => {
+      const g = (sel: string) => getComputedStyle(document.querySelector(sel) as Element).backgroundColor
+      return { dialog: g('.chat-dialog'), main: g('.chat-main'), vp: g('.chat-scroll-viewport') }
+    })
+    expect(bgs.main).toBe(bgs.dialog)
+    expect(bgs.vp).toBe(bgs.dialog)
+    expect(bgs.main).not.toBe('rgba(0, 0, 0, 0)')
   })
 
   test('长代码行:横向滚动收敛在代码块内部,.chat-main 无横向溢出', async ({ page }) => {

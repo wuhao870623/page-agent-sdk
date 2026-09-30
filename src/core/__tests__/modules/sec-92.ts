@@ -157,6 +157,35 @@ export async function run(ctx: TestCtx): Promise<void> {
     // 负例:非对象 sample(缺 type)→ 原顺序兜底不炸
     const r2 = await invoke(dt['write'], { patches: [{ op: 'append', jsonPath: 'items', value: { props: { bogus: 1 } } }] })
     assert(/SCHEMA_(STRIP|INVALID)/.test(r2), '✓ 无判别值的元素 → hint 兜底(首含分支/并集)不炸')
+    // F4b:同批多元素 append(ei>1)—— sample 按各元素自己的序号定位(wrapPathValue 下 array 索引取位),
+    // 第二个元素的 hint 也必须按它自己的 type 给(修前取 clone 旧首元素,恒 heading 键集)
+    const dmVal = [
+      { type: 'heading', props: { text: 'ok', level: 2 } },
+      { type: 'banner', props: { image: 'y', title: '错字段' } },   // 第二个元素错字段 → strip 在 ei=1 处
+    ]
+    const r3 = await invoke(dt['write'], { patches: [{ op: 'append', jsonPath: 'items', value: dmVal }] })
+    const hint3 = (r3.match(/可用字段:[^)】]*\)/) || [''])[0]
+    assert(/SCHEMA_STRIP/.test(r3) && /image/.test(hint3) && !/\blevel\b/.test(hint3), `✓ 多元素 append ei>1 → 第二元素 hint 按其自身 type(banner 键集;实际:${hint3})`)
+    // F4c:嵌套容器(children 内组件)union 的 sample 定界 —— z.lazy 递归 + 深路径 sample 逐段收窄
+    const dschema2 = z.object({
+      items: z.array(z.discriminatedUnion('type', [
+        z.object({ type: z.literal('section'), props: z.object({}), children: z.array(z.discriminatedUnion('type', [
+          z.object({ type: z.literal('banner'), props: z.object({ image: z.string() }) }),
+          z.object({ type: z.literal('heading'), props: z.object({ text: z.string(), level: z.number() }) }),
+        ])).optional() }),
+        z.object({ type: z.literal('plain'), props: z.object({ body: z.string() }) }),
+      ])),
+    })
+    const dbind2: any = { items: [{ type: 'section', props: {}, children: [{ type: 'heading', props: { text: 'h', level: 1 } }] }] }
+    const dt2 = byName(createDataOps({ schema: dschema2, bind: dbind2, description: 'd2' }))
+    // 往 section.children 追加 banner 组件 + 错字段 → hint 给 banner 键集(嵌套 union 的 sample 链:items→0→children→0)
+    const r4 = await invoke(dt2['write'], { patches: [{ op: 'append', jsonPath: 'items.0.children', value: { type: 'banner', props: { image: 'z', title: 'x' } } }] })
+    const hint4 = (r4.match(/可用字段:[^)】]*\)/) || [''])[0]
+    assert(/SCHEMA_STRIP/.test(r4) && /image/.test(hint4) && !/\blevel\b/.test(hint4), `✓ 嵌套 children union strip → hint 按深路径 sample 给 banner 键集(实际:${hint4})`)
+    // F4d:merge 路径的 sample(merge 错字段进 banner 组件 → hint 按 banner;此前该点无 sample 断言)
+    const r5 = await invoke(dt['write'], { patches: [{ op: 'merge', jsonPath: 'items.0.props', value: { title: 'x' } }] })
+    const hint5 = (r5.match(/可用字段:[^)】]*\)/) || [''])[0]
+    assert(/SCHEMA_STRIP/.test(r5) && /image/.test(hint5) && !/\blevel\b/.test(hint5), `✓ merge 路径 strip → hint 按终态 type 给 banner 键集(实际:${hint5})`)
   }
 
   // ===== G. 整体 set 只校验出现 key + patches 最终态 =====
