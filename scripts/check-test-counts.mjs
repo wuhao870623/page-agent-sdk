@@ -49,12 +49,18 @@ function collectDeclared() {
     else parseWarnings.push(`${f}:未匹配到 tests 徽章`)
   }
 
-  // 3) CHANGELOG 最新版本段的测试计数(取「selftest X → **Y**」等终值;段内无该项则跳过)
+  // 3) CHANGELOG 最新**版本**段的测试计数(取「selftest X → **Y**」等终值;段内无该项则跳过)
+  //    ⚠️ 必须跳过 [Unreleased](2026-09-30 修):它恒排在最新版本段之前,且发布时条目会被搬进版本段
+  //    留它为空壳 —— 取它 = latest 是空串 = 该维度恒为 null = CHANGELOG 对账自始形同虚设(静默失效)。
+  //    修法只前移到「最新版本段」而**不**回退到历史声明:CHANGELOG 的计数是「变化时才写」的增量记录
+  //    (4.25.2 只写 selftest、4.25.0 才三个都写),且历史存在声明缺口(browser 末次声明 4.25.0 的 184、
+  //    实际已 185)—— 拿历史值当基准会把这类缺口误报成漂移。段内无计数 = 该版未改计数 = 跳过,语义正确。
   const changelog = read('CHANGELOG.md')
-  const firstVer = changelog.indexOf('## [')
-  const nextVer = changelog.indexOf('## [', firstVer + 1)
-  const latest = changelog.slice(firstVer, nextVer === -1 ? undefined : nextVer)
-  const verName = (changelog.slice(firstVer, firstVer + 30).match(/## \[([^\]]+)\]/) || [])[1] || '最新版本'
+  const firstVer = (() => { const m = /^## \[(?!Unreleased\])/m.exec(changelog); return m ? m.index : -1 })()
+  if (firstVer === -1) parseWarnings.push('CHANGELOG:未找到版本段(是否全被 [Unreleased] 占据?)')
+  const nextVer = firstVer === -1 ? -1 : changelog.indexOf('## [', firstVer + 1)
+  const latest = firstVer === -1 ? '' : changelog.slice(firstVer, nextVer === -1 ? undefined : nextVer)
+  const verName = firstVer === -1 ? '最新版本' : ((changelog.slice(firstVer, firstVer + 40).match(/## \[([^\]]+)\]/) || [])[1] || '最新版本')
   const pick = (re) => { const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'); const m = [...latest.matchAll(g)].pop(); return m ? +m[1] : null }
   const st = pick(/selftest\s+\d+\s*→\s*\*{0,2}(\d+)\*{0,2}/)
   const e2 = pick(/e2e\s+\d+\s*→\s*\*{0,2}(\d+)\*{0,2}/)
@@ -68,14 +74,16 @@ function collectDeclared() {
 function collectActual() {
   const actual = {}
   const run = (cmd, re, label) => {
+    // matchAll 需全局标志(line 64 pick 同款归一;修前三个裸正则均无 g → --run 必抛 TypeError 崩溃)
+    const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
     try {
       const out = execSync(cmd, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20 * 60_000 })
-      const m = [...(out + '').matchAll(re)].pop()
+      const m = [...(out + '').matchAll(g)].pop()
       if (m) actual[label] = +m[1]
       else parseWarnings.push(`实跑 ${cmd}:输出未匹配到汇总行`)
     } catch (e) {
       const out = (e.stdout || '') + (e.stderr || '')
-      const m = [...out.matchAll(re)].pop()
+      const m = [...out.matchAll(g)].pop()
       if (m) actual[label] = +m[1]
       else problems.push(`实跑 ${cmd} 失败(exit ${e.status});汇总行未解析`)
     }

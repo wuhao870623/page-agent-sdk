@@ -740,6 +740,12 @@ A3 曾写「116 个模块」,实测 sec-*.ts = **115**(runner import 同数)—�
 
 **现状基础**:read_page 智能定位 article/main/[role=main]/.content 容器,只排除 SDK 自身 DOM 与 script/style(`domTool.ts` 工具描述明示);宿主 UI 面板落在定位容器内即被读进正文 —— learning 实证(2026-09-29 诊断 T1):「我的知识点摘要/写摘要」面板文字混进 read_page 首段(~60 字/页)。任何带侧栏/摘要卡的文档站集成都会遇到同款。**候选形态**:`domInspect` 配置组加 `excludeSelectors?: string[]`,或约定 data 属性(如 `data-pg-chrome`)宿主标 chrome 免配置(后者的取舍:零配置但引入隐式契约,前者显式但多一个配置项)。**暂缓理由**:当前噪音量级小(~60 字),单一集成方、无回答质量损害实例;机制虽简单但需过 d.ts 双侧 + usage-guide + browser e2e 全链。**重启触发**:第二个集成方文档站带侧栏/摘要卡且 read_page 噪音实际影响回答(误引 UI 文案作正文断言),或单页噪音 >500 字级。
 
+### [2026-10-02] QuoteAnchor.blockIndex 恒 undefined(HTMLCollection 判型错)— ✅ 已修(2026-10-10,随 learning 验收顺手修)
+
+**原状**:`captureSelectionQuote` 的 S4 锚点捕获(src/core/tools/quoteInput.ts:255)`blockIndex: Array.isArray(block?.parentElement?.children) ? … : undefined` —— 浏览器 DOM 的 `parentElement.children` 是 **HTMLCollection 非 Array**,`Array.isArray` 恒 false → 真机上 `blockIndex` **从不写入**(恒 undefined)。selftest sec-131:124 的 `blockIndex === 1` 断言走的是真数组桩(mock parentElement.children = Array),恰好掩盖了真浏览器行为。真机实证:learning 门户两次划词捕获的 anchor 均无 `blockIndex` 字段。
+**修法(即原候选)**:新增 `elementListOf(children)` 兼容面(「有数字 length 的类数组」收转,数组桩与 HTMLCollection 通吃),`buildQuoteSelector` 的 nth-of-type 段(同族问题:修前真机恒裸 tag 链,多 p 容器必多命中)与 `blockIndex` 段统一走它;sec-131 桩改 HTMLCollection-like(`toCollection`,带 length 无数组方法)防再掩盖 —— 修前必红。selftest 3825 + e2e 1294 全绿;learning 真机 refresh 场景(持久化引用 + 修复后 selector 收窄)从失败转 6/6 实证有效。
+**余项**:learning 侧 `npm update page-agent-sdk` 待 SDK 发版后才能真正获益(当前 node_modules 临时拷 dist 验证);SDK CHANGELOG 条目随下次发布补。
+
 ### [2026-09-29] workingMemory 扩展到页面读工具(防同话题追问重复检索)— ❌ 否决(服从率存疑 + 方向风险)
 
 **评估结论**:learning 真机诊断(2026-09-29)实证「同话题追问重复检索」浪费(T4 与 T3 同查询重跑 `dom_search` + `read_page`,+2 轮;T1 已读全文在历史、T3 已 get_dom §3.2 表格的前提下)。候选 = `CAPTURE_TOOLS`(现仅 `read/query_data/search_data`,workingMemory.ts:21)扩到 `read_page/dom_search/dom_info/get_dom`,注入「近期已读 + 无失效通知」事实提示。否决三条:① **服从率存疑** —— flash 对同类文本提示服从率低(learning prompt 已有「已读过的内容直接用,不必再读页面」,T4 照读),SDK 再加一段大概率同样结局;② **方向风险** —— 同诊断里页面 mid-session 被提案 apply 悄悄改过(§11.1 上线),T3/T4 的重读恰好保证答案新鲜;SDK 只能诚实陈述「读过什么、何时」,**说不了「页面没变」**(notifyHostChange 漏报是常态风险,往「信历史」推会放大此类错误);③ **成本收益不匹配** —— 2 轮 flash ≈ +3~6s、前缀缓存命中、token 增量小,不满足「真机实证驱动机制化」门槛。**重启触发**:真机基线(docs-qa/uispec)显示重复检索成为轮次/token 成本主因 —— 届时优先把失效信号做准(「须重读」在页面真变时必然出现),而非加提示;`--baseline-diff` 的 toolCount 维度可直接量化这类改动的效果。

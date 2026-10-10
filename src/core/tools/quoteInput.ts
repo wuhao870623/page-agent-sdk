@@ -111,6 +111,17 @@ function cssEscapeIdent(s: string): string {
 }
 
 /**
+ * children 兼容面:真浏览器 DOM 的 `element.children` 是 HTMLCollection(非 Array),
+ * `Array.isArray` 判型会恒 false —— 修前 buildQuoteSelector 的 nth-of-type 段与
+ * blockIndex 在真机上从不生效(恒裸 tag 链 / 恒 undefined),仅测试数组桩能过。
+ * 统一按「有数字 length 的类数组」收转,数组桩与 HTMLCollection 通吃。
+ */
+function elementListOf(children: unknown): unknown[] | undefined {
+  if (!children || typeof (children as ArrayLike<unknown>).length !== 'number') return undefined
+  return Array.from(children as ArrayLike<unknown>)
+}
+
+/**
  * 块级祖先 → CSS selector(id 优先命中即止;否则 tag:nth-of-type 链,向上 ≤4 层,body/HTML 截止)。
  * 纯函数;元素缺 parentElement/children 面(duck-typing 桩)→ 能拼多少拼多少(宁短勿错)。
  */
@@ -119,9 +130,9 @@ export function buildQuoteSelector(el: ElementLike | null | undefined): string |
   const segOf = (n: ElementLike): string => {
     const tag = String(n.tagName).toLowerCase()
     if (n.id) return `${tag}#${cssEscapeIdent(n.id)}`
-    const sibs = n.parentElement?.children
-    if (Array.isArray(sibs)) {
-      const same = sibs.filter((s) => String(s.tagName ?? '').toLowerCase() === tag)
+    const sibs = elementListOf(n.parentElement?.children)
+    if (sibs) {
+      const same = sibs.filter((s) => String((s as ElementLike).tagName ?? '').toLowerCase() === tag) as ElementLike[]
       if (same.length > 1) {
         const idx = same.indexOf(n)
         if (idx >= 0) return `${tag}:nth-of-type(${idx + 1})`
@@ -250,9 +261,12 @@ export function captureSelectionQuote(doc: QuoteDocLike): MessageQuote | null {
   const block = findBlockAncestor(anchorEl as unknown as Parameters<typeof findBlockAncestor>[0])
   const qAll = queryAll ?? (typeof document !== 'undefined' ? (s: string) => Array.from(document.querySelectorAll(s)) : undefined)
   const headingEl = qAll ? findNearestHeadingEl(anchorEl, qAll) : undefined
+  // blockIndex 同款判型(见 elementListOf):真 HTMLCollection 下 Array.isArray 恒 false → 恒 undefined
+  const blockSibs = elementListOf(block?.parentElement?.children) as ElementLike[] | undefined
+  const blockIdx = blockSibs ? blockSibs.indexOf(block!) : -1
   const anchor = normalizeQuoteAnchor({
     selector: buildQuoteSelector(block),
-    blockIndex: Array.isArray(block?.parentElement?.children) ? (block!.parentElement!.children as unknown[]).indexOf(block) : undefined,
+    blockIndex: blockIdx >= 0 ? blockIdx : undefined,
     ...measureQuoteOffset(String(block?.textContent ?? ''), raw, sel.getRangeAt?.(0)),
     heading: headingEl?.textContent?.trim()?.slice(0, 60) || undefined,
     headingId: (headingEl as { id?: string } | undefined)?.id || undefined,

@@ -32,6 +32,16 @@ const link = (parent: FakeEl, ...kids: FakeEl[]): FakeEl => {
   for (const k of kids) { k.parentElement = parent; parent.children.push(k) }
   return kids[0]
 }
+/**
+ * children 转 HTMLCollection-like(有 length + 数字索引的类数组,无数组方法)。
+ * 真浏览器 DOM 的 element.children 就是这个形态 —— 桩用它而非真数组,防 Array.isArray 判型
+ * 回归再被数组桩掩盖(2026-10-02 修:修前 buildQuoteSelector 恒不拼 nth-of-type、blockIndex 恒 undefined)。
+ */
+const toCollection = (kids: FakeEl[]): FakeEl[] => {
+  const c: Record<string, unknown> = { length: kids.length }
+  kids.forEach((k, i) => { c[i] = k })
+  return c as unknown as FakeEl[]
+}
 
 export async function run(ctx: TestCtx) {
   const { assert } = ctx
@@ -45,6 +55,7 @@ export async function run(ctx: TestCtx) {
     const root = el('section')
     const p1 = el('p'); const p2 = el('p')
     link(root, p1, el('p'), p2)
+    root.children = toCollection(root.children) // 真浏览器形态:HTMLCollection-like(修前 Array.isArray 判型错 → 恒裸链)
     assert(buildQuoteSelector(p2) === 'section > p:nth-of-type(3)', `同类多个 → nth-of-type 按 children 序(实际 ${buildQuoteSelector(p2)})`)
     assert(buildQuoteSelector(p1) === 'section > p:nth-of-type(1)', `首个同类 → nth-of-type(1)(实际 ${buildQuoteSelector(p1)})`)
   }
@@ -104,6 +115,7 @@ export async function run(ctx: TestCtx) {
     const container = el('div'); container.id = 'content'
     const p = el('p', '这是第一段,包含被引用的句子。这句话会被选中提问。')
     link(container, h2, p)
+    container.children = toCollection(container.children) // HTMLCollection-like:防 blockIndex/nth 判型回归(见 toCollection 注)
     const fakeDoc = {
       title: '学习导航',
       location: { href: 'https://x.dev/#/doc/a' },

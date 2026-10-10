@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [4.25.4] - 2026-10-10
+
+### Fixed
+
+- **划词引用 DOM 锚点在真浏览器上从不生效**(`quoteInput.ts`,HTMLCollection 判型错):`buildQuoteSelector` 的 nth-of-type 段与 `QuoteAnchor.blockIndex` 捕获段此前均以 `Array.isArray(children)` 为闸 —— 真浏览器 DOM 的 `element.children` 是 **HTMLCollection 非 Array**,判型恒 false → 真机上 selector 恒退化为裸 tag 链(多同类标签容器内必多命中,锚点收窄失效)、`blockIndex` 恒 `undefined`;仅测试的真数组桩能过,恰好掩盖真机行为(learning 门户真机验收实证:两次划词捕获的 anchor 均无 blockIndex 字段)。新增 `elementListOf` 兼容面(「有数字 length 的类数组」收转,真数组/HTMLCollection/NodeList 通吃)两处统一走它;sec-131 桩改 HTMLCollection-like(有 length 无数组方法)防再掩盖 —— 修前必红。selftest 3825 / e2e 1294 全绿(计数零漂移);learning 门户临时拷入修复 dist 后 refresh 场景(持久化引用 + anchor 收窄跨刷新命中)从失败转通过。
+
+### Changed
+
+- **计数对账脚本的 CHANGELOG 维度修复**(`scripts/check-test-counts.mjs`,仓库工具非包内容):取「最新版本段」时跳过 `[Unreleased]` —— 它恒排在最新版本段之前且发布时条目被搬走留空壳,取它 = 空串 = 该维度恒为 null,CHANGELOG 对账自 Batch A9 落地起**静默失效**(每次发布仍打印 `CHANGELOG Unreleased: selftest=— …` 看似正常)。改为正则 `^## \[(?!Unreleased\])` 定位首个真实版本段;**只前移不回退**到历史声明 —— CHANGELOG 计数是「变化时才写」的增量记录(4.25.2 只写 selftest),且历史有声明缺口(browser 末次声明为 4.25.0 的 184、实际已 185),拿历史值当基准会把缺口误报成漂移。验证:把最新段的 selftest 计数临时篡改为 9999 → 精确报 `CLAUDE.md 自测行=3825 vs CHANGELOG 4.25.3=9999` + 退出码 1(修前静默通过);还原后绿。② 同批修 `--run` 实跑模式**自始必崩**:`collectActual` 的三个汇总行正则均无 `g` 标志,`matchAll` 收非全局正则抛 TypeError(成功路径抛、catch 内再抛无人接)—— 该模式仅发布时使用故从未暴露;照 line 64 `pick` 同款归一补全局标志,4.25.4 发布门禁实跑验证(selftest/e2e 真值吻合;browser 腿须 5173 端口空闲 —— 被其他 dev server 占用时 playwright `reuseExistingServer` 复用错服务整片超时,属环境约束非计数漂移)。
+
 ## [4.25.3] - 2026-09-30
 
 ### Fixed
