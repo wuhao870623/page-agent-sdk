@@ -152,7 +152,9 @@ export function createHumanConfirmMiddleware(
           hold = () => { held = true; clearTimeout(timer) }
         }
 
-        ctx.emit?.({ type: 'approval_request', toolName: ctx.name, args: ctx.args, resolve: finish, hold })
+        // resolve 形参放宽适配 approval_request 事件签名(4.26 授权形裁决):征询不参与一次性授权,
+        // 载荷不带 remember → UI 不会发对象形;兜底把对象形按 approved 布尔收口(语义安全:征询只有允许/拒绝/选方案)
+        ctx.emit?.({ type: 'approval_request', toolName: ctx.name, args: ctx.args, resolve: (choice: boolean | string | import('./approval').ApprovalGrantResolve) => finish(typeof choice === 'object' && choice !== null ? choice.approved : choice), hold })
         // 挂起留痕(与 approval 中间件同款,2026-09-02):exportDiagnostics/debugLogs 可见「卡在等人工确认」
         ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_pending', toolName: ctx.name } })
       })

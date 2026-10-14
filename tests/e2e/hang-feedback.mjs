@@ -535,5 +535,59 @@ export async function run() {
     sdk2.unmount()
   }
 
+
+  console.log('[e2e:hang-feedback] approval 一次性授权(4.26):授权收口 → 会话内直通 → 撤销/切会话恢复询问')
+  {
+    // 队列:① write(挂确认 → 我们以 {approved:true, remember:true} 收口 = UI「允许并不再询问」)
+    // ② 再 write(已授权:不再挂起,直接执行)③ revokeApprovalGrants 后再 write(恢复挂起)④ 常规允许收口
+    // 每轮 stream 消耗两条模型响应(工具调用 + 文本收口),三条 write 分属三轮
+    const llm = stubModel(
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'x' } } }] },
+      { text: '(第一轮完成)' },
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'y' } } }] },
+      { text: '(第二轮完成)' },
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'z' } } }] },
+      { text: '(全部完成后收口)' },
+    )
+    const approvals = []
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-approval-remember', storage: 'memory', llm, autoTitle: false,
+      data: { schema: z.object({ title: z.string() }), bind: { title: 'a' }, description: 'd' },
+      approval: { tools: ['write'], remember: true },
+      capabilities: { ...CAPS, subagent: false },
+    })
+    await sdk.mount()
+    const stream1 = sdk.stream([{ role: 'user', content: '改标题1', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request') approvals.push(e)
+    })
+    await new Promise((r) => setTimeout(r, 100))
+    assert(approvals.length === 1, `前置①:write 挂起确认(实际 ${approvals.length})`)
+    assert(approvals[0].remember === true, '✓ remember 开 → approval_request 载荷带 remember:true')
+    approvals[0].resolve({ approved: true, remember: true }) // UI 第三按钮的等效收口
+    await stream1
+    assert(sdk.inspect().approvals?.remember === true, '✓ inspect().approvals.remember 反射配置')
+    assert(JSON.stringify(sdk.inspect().approvals?.grantedTools) === JSON.stringify(['write']), `✓ inspect().approvals.grantedTools=['write'](实际 ${JSON.stringify(sdk.inspect().approvals?.grantedTools)})`)
+
+    // ② 已授权:同会话第二次 write 不再挂起(无 approval_request,直接执行)
+    const before = approvals.length
+    await sdk.stream([{ role: 'user', content: '改标题2', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request') approvals.push(e)
+    })
+    assert(approvals.length === before, `✓ 已授权直通:不发 approval_request(实际新增 ${approvals.length - before})`)
+    assert(sdk.debugLogs.value.some((l) => l.data?.stage === 'approval_auto_allowed' && l.data?.toolName === 'write'), '✓ 直通留痕 approval_auto_allowed')
+
+    // ③ 撤销 → 恢复逐次确认
+    sdk.revokeApprovalGrants()
+    assert(sdk.inspect().approvals?.grantedTools.length === 0, '✓ revokeApprovalGrants → 授权集清空(inspect 反射)')
+    const stream3 = sdk.stream([{ role: 'user', content: '改标题3', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request') approvals.push(e)
+    })
+    await new Promise((r) => setTimeout(r, 100))
+    assert(approvals.length === before + 1, `✓ 撤销后恢复挂起确认(实际 ${approvals.length})`)
+    approvals[approvals.length - 1].resolve(true) // 常规允许(布尔收口语义不变)
+    await stream3
+    assert(sdk.debugLogs.value.some((l) => l.data?.stage === 'approval_grants_revoked'), '✓ 撤销留痕 approval_grants_revoked')
+    sdk.unmount()
+  }
   return { pass: ctx.pass, fail: ctx.fail }
 }

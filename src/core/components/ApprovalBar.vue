@@ -96,6 +96,17 @@ const previewRefused = computed(() => {
       </div>
       <div class="approval-actions">
         <button class="approval-deny" @click="resolveApproval(false)"><MsgText :text="m.deny" /></button>
+        <!-- 一次性授权(4.26,approval.remember 开才有):允许本次并授予会话级免确认 —— 批量写场景
+             不必逐条点允许;拒绝/超时永不授权,switchSession/resetSession/撤销即失效。refuse 预览态同样
+             禁用(批准一个必失败的操作没有意义,授权更不行) -->
+        <button
+          v-if="pendingApproval.remember"
+          class="approval-remember"
+          :disabled="previewRefused"
+          data-test="approval-remember"
+          :title="m.approveRememberHint"
+          @click="resolveApproval({ approved: true, remember: true })"
+        ><MsgText :text="m.approveRemember" /></button>
         <button class="approval-allow" :disabled="previewRefused" data-test="approval-allow" @click="resolveApproval(true)"><MsgText :text="m.approve" /></button>
       </div>
     </template>
@@ -131,9 +142,12 @@ const previewRefused = computed(() => {
 .approval-deny:hover { background: rgba(127, 127, 127, 0.1); color: var(--cs-bg-text); }
 .approval-allow { background: var(--cs-primary); color: #fff; box-shadow: 0 1px 3px rgba(var(--cs-primary-rgb), 0.3); }
 .approval-allow:hover { opacity: 0.92; transform: translateY(-1px); }
-/* 预览 refuse 态:允许禁用(半透明去 hover),拒绝是唯一出口 */
-.approval-allow:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
-.approval-allow:disabled:hover { opacity: 0.45; }
+/* 一次性授权入口:次级样式(描边主色,弱于「允许」实心)—— 常规路径仍一眼先看到逐次允许 */
+.approval-remember { background: transparent; color: var(--cs-accent, var(--cs-primary)); border: 1px solid rgba(var(--cs-primary-rgb), 0.55); }
+.approval-remember:hover { background: rgba(var(--cs-primary-rgb), 0.1); }
+/* 预览 refuse 态:允许禁用(半透明去 hover),拒绝是唯一出口(授权入口同禁) */
+.approval-allow:disabled, .approval-remember:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+.approval-allow:disabled:hover, .approval-remember:disabled:hover { opacity: 0.45; }
 .approval-question { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: var(--cs-bubble-ai, #fff); border: 1px solid rgba(var(--cs-warn-rgb, 217, 119, 6), 0.25); font-size: 13px; color: var(--cs-bg-text); line-height: 1.6; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03); }
 .approval-context { margin: 6px 0 10px; padding: 0 2px; font-size: 12px; color: var(--cs-bg-muted); line-height: 1.6; }
 .approval-recommend { margin: 8px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(var(--cs-primary-rgb), 0.08); border-left: 3px solid var(--cs-primary); font-size: 12px; color: var(--cs-accent, var(--cs-primary)); line-height: 1.6; }

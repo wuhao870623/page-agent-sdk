@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3825%20asserts-brightgreen.svg)](#自测)
+[![tests](https://img.shields.io/badge/self%20tests-3841%20asserts-brightgreen.svg)](#自测)
 
 ---
 
@@ -262,7 +262,7 @@ ChatDialog, MessageContent, CodePreview, SkillPanel, DebugDrawer, useChat
 | | `capabilities.domEdit` | `boolean` | **DOM 编辑(默认 false;需 domInspect)**:装配 `dom_edit`(宿主页面批量原子操作:set_text/set_html/set_attr/add_class/set_style/insert/remove/move/highlight)+ `dom_restore`(快照回滚,栈 20 批)。唯一 selector 纪律/危险闸(script·on\*·javascript:)//SDK 自身 DOM 保护;改动为会话临时态 —— 数据驱动页面应改数据(`write`)。见 [usage-guide §6.22](doc/usage-guide.md#622-dom-编辑dom_edit--dom_restore) |
 | | `permissions` | `PermissionRule[]` | scope 白名单（first-match-wins，默认不启用） |
 | | `humanConfirm` | `boolean` · 默认 `true` | 主动征询（AI 不确定/多方案主动问你，不猜测） |
-| | `approval` | `{tools?,confirm?,timeoutMs?,humanConfirmTool?}` · 默认关 | 被动确认白名单（写操作前弹允许/拒绝） |
+| | `approval` | `{tools?,confirm?,remember?,timeoutMs?,humanConfirmTool?}` · 默认关 | 被动确认白名单（写操作前弹允许/拒绝）;`remember:true` 确认条多一枚「允许并不再询问(本会话)」—— 会话级一次性授权,`sdk.revokeApprovalGrants()` 可撤销,切会话/重置自动失效 |
 | | `checkpoint` | `boolean \| {maxCheckpoints?,auto?}` · 默认关 | 会话级回滚（`auto` 默认 `true` 每轮存档） |
 | | `verify` | `{check?,maxAttempts?,adversarial?}` | 需 `capabilities.verify:true`；`check` 省略用 `createWriteBackCheck`（读回根对象自动取 `data.bind`，适配 `sdk.setData` 运行时替换） |
 | **子 agent** | `subagent` | `{allowedTools?,systemPrompt?,temperature?,llm?,maxDepth?·1,maxParallel?·4}` | 运行时自由委派（`spawn_agent`/`spawn_agents`） |

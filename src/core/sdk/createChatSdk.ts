@@ -220,6 +220,8 @@ export interface AgentCore {
   setQuote(text: string, source?: string, anchor?: MessageQuote['anchor']): void
   /** 清除待发引用 */
   clearQuote(): void
+  /** 撤销全部一次性授权(4.26):清空会话级授权集,后续调用恢复逐次确认;授权随 switchSession/resetSession 自动失效 */
+  revokeApprovalGrants(): void
   /** S2 宿主变更通知:SPA 换文/路由切换/tab 切换后调用 —— 流内页面读结果置过期占位 + 下一 invoke 注入一次性重读提示段 */
   notifyHostChange(opts?: { reason?: string }): void
   /** content-proposals:宿主裁决回传(用户点「应用/放弃」后调)→ 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
@@ -998,9 +1000,14 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     ? (name: string, args: any) => options.approval?.previewWrite?.(name, args) ?? dataOpsApprovalPreview?.(name, args) ?? null
     : undefined
   // timeoutMs 装配层归一:undefined → approvalNoRespMs(无 UI 默认 30s / UI 无限等);显式值(含 Infinity=0 无限等)原样透传
-  const approvalMw = options.approval && (options.approval.tools !== undefined || !!options.approval.confirm)
+  // 一次性授权(4.26):approvalGrants 由装配层持有(switchSession/resetSession 清空、revokeApprovalGrants 撤销、
+  // inspect().approvals 反射);remember 开启时中间件消费它 —— 已授权工具名免确认直通,UI 出现「允许并不再询问」入口
+  const approvalGrants = new Set<string>()
+  const approvalMw = options.approval && (options.approval.tools !== undefined || !!options.approval.confirm || options.approval.remember === true)
     ? createApprovalMiddleware({
         ...options.approval,
+        remember: options.approval.remember === true,
+        grants: approvalGrants,
         timeoutMs: options.approval.timeoutMs ?? approvalNoRespMs,
         onAutoReject: onApprovalAutoReject,
         previewWrite: approvalPreviewWrite,
@@ -1769,12 +1776,12 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
       return results
     },
 
-    /** 切换会话(F2b 委托 sessionLifecycle;签名经 AgentCore 注解约束) */
-    switchSession: (sessionId) => sl.switchSession(sessionId),
+    /** 切换会话(F2b 委托 sessionLifecycle;签名经 AgentCore 注解约束)。一次性授权随会话失效:切换即清空 */
+    switchSession: (sessionId) => { approvalGrants.clear(); return sl.switchSession(sessionId) },
     exportSession: (sessionId) => sl.exportSession(sessionId),
     importSession: (data) => sl.importSession(data),
 
-    resetSession: () => sl.resetSession(),
+    resetSession: () => { approvalGrants.clear(); sl.resetSession() },
 
     stream: async (msgs, onEvent, signal) => {
       if (!core.agent) throw new Error('page-agent-sdk: agent 尚未初始化完成,请先 await mount()')
@@ -1976,6 +1983,8 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
         ...(proposalChannel ? { proposals: proposalChannel.snapshot() } : {}),
         // auto-host-watch 反射:配置存在才出现(_createChatSdk 传入 state 载体);enabled=false = 服务端/headless 特性探测全缺(合法 no-op)
         ...(hostWatchState ? { hostWatch: { ...hostWatchState } } : {}),
+        // 一次性授权反射(4.26):配置存在才出现;grantedTools = 当前会话已免确认的工具名(宿主据此做撤销 UI)
+        ...(options.approval ? { approvals: { remember: options.approval.remember === true, grantedTools: [...approvalGrants] } } : {}),
         llmRetries: core.agent?.getLlmRetries?.() ?? 0,
         llmCallFailures: core.agent?.getLlmCallFailures?.() ?? 0,
         // A9 观测面:收口门禁会话累计(page_assertion_gate 键存在性 = S3 domInspect 装配反射) +
@@ -2150,6 +2159,15 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     /** 清除待发引用 */
     clearQuote(): void {
       pendingQuote.value = null
+    },
+    /** 撤销全部一次性授权(4.26):清空会话级授权集,后续调用恢复逐次确认;幂等,空集调用无害 */
+    revokeApprovalGrants(): void {
+      const had = approvalGrants.size > 0
+      approvalGrants.clear()
+      if (had) {
+        core.agent?.debugLogs?.value?.push({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_grants_revoked' } })
+        core.infoTick.value++
+      }
     },
     /** content-proposals:宿主裁决回传(applied/discarded)→ 提案出队 + 事件 + 下轮一次性结局注入段。
      *  返回 false = id 未知或已裁决(幂等);detail 如写回失败的说明会进结局段 */
@@ -2697,6 +2715,8 @@ export function _createChatSdk(options: ChatSdkOptions, mounter?: DialogMounter)
     clearQuote: core.clearQuote,
     /** S2 宿主变更通知:SPA 换文/路由切换后调用 —— 流内页面读结果置过期占位,跨轮注入一次性「重读当前页面」提示段 */
     notifyHostChange: core.notifyHostChange,
+    /** 撤销全部一次性授权(4.26):后续调用恢复逐次确认;授权随 switchSession/resetSession 自动失效 */
+    revokeApprovalGrants: core.revokeApprovalGrants,
     resolveProposal: core.resolveProposal,
     get proposals() { return core.getProposals() },
     messages: core.messages,

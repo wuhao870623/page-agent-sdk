@@ -205,7 +205,7 @@ export type StreamEvent =
   | { type: 'tool_call'; name: string; args: any; id?: string }
   | { type: 'tool_result'; name: string; result: string; status: 'done' | 'error'; durationMs?: number; id?: string; /** 截图产出(page-screenshot;vision 通道合成消息之外的可观察面,UI 缩略图消费) */ image?: { dataUri: string; thumb?: string; vfsRef?: string } }
   | { type: 'subagent'; taskId: string; label: string; kind: 'tool_call' | 'tool_result' | 'reasoning'; name: string; args?: any; result?: string; status?: 'done' | 'error'; delta?: string; toolCallId?: string }
-  | { type: 'approval_request'; toolName: string; args: any; resolve: (approved: boolean | string) => void; hold?: () => void; preview?: ApprovalWritePreview }
+  | { type: 'approval_request'; toolName: string; args: any; resolve: (approved: boolean | string | { approved: boolean; remember?: boolean }) => void; hold?: () => void; preview?: ApprovalWritePreview; remember?: boolean }
   | { type: 'done'; content: string };
 
 /** write 审批 diff 预览的单条条目(ui-quick-wins Q3;headless 补充声明供 StreamEvent 引用) */
@@ -447,6 +447,8 @@ export interface AgentInfo {
   workingMemory?: WorkingMemory;
   /** 写驱动过期读失效会话累计(stale-read-invalidation;写后旧 read/query/search 结果被替换为占位的次数) */
   staleReadsInvalidated?: number;
+  /** 一次性授权反射(4.26;配置存在才出现):remember 开关 + 当前会话已免确认的工具名 */
+  approvals?: { remember: boolean; grantedTools: string[] };
   /** S2 宿主变更失效会话累计(host-integration-contract;notifyHostChange 触发的页面读占位替换次数,与写驱动分列) */
   hostReadsInvalidated?: number;
   /** hostWatch 装配反射(4.21+;配置存在才出现):enabled=false = 服务端/headless 特性探测全缺(合法 no-op);autoNotified = 自动报案会话累计 */
@@ -602,7 +604,7 @@ export interface UseChatOptions {
 export interface PendingApproval {
   toolName: string;
   args: any;
-  resolve: (approved: boolean | string) => void;
+  resolve: (approved: boolean | string | ApprovalGrantResolve) => void;
   /** write 审批 diff 预览(approval_request 载荷透传;无则 undefined 走 args JSON 兜底呈现) */
   preview?: ApprovalWritePreview;
 }
@@ -816,12 +818,23 @@ export interface ApprovalOptions {
   tools?: string[];
   /** 自定义判定(优先于 tools);返回 true 需确认 */
   confirm?: (name: string, args: any) => boolean;
+  /**
+   * 一次性授权(4.26,opt-in 默认关)。⚠️ headless 子路径无内置 UI,确认条不存在 → 无「允许并不再询问」入口;
+   * 该开关仅在宿主自建确认通道时有意义(事件 resolve 收口 `{approved:true, remember:true}` 即授权)。
+   * 授权随 switchSession/resetSession 失效,可经 `sdk.revokeApprovalGrants()` 撤销;拒绝/超时/abort 永不授权。
+   */
+  remember?: boolean;
   /** 超时毫秒(无响应自动拒绝);SDK 装配层默认 30000(响应方调事件的 hold() 接管后不限时);显式 Infinity/负数 = 不超时 */
   timeoutMs?: number;
   /** 超时自动拒的留痕回调(abort/用户先收口不触发) */
   onAutoReject?: (info: { toolName: string; waitedMs: number }) => void;
   /** 是否装载 request_human_confirmation 主动确认工具(传 approval 时默认 true;false 关闭) */
   humanConfirmTool?: boolean;
+}
+/** 授权形裁决(4.26 一次性授权):approved=true 且 remember=true → 允许本次并授予会话级免确认 */
+export interface ApprovalGrantResolve {
+  approved: boolean;
+  remember?: boolean;
 }
 export declare function createApprovalMiddleware(opts?: ApprovalOptions): any;
 export declare function createHumanConfirmTool(): any;
@@ -1263,6 +1276,8 @@ export interface ChatSdk {
   clearQuote(): void;
   /** S2 宿主变更通知:SPA 换文/路由切换/tab 切换后调用 —— 流内页面读结果(read_page/dom_search/dom_info/get_dom/take_screenshot)置过期占位,并注入一次性「重读当前页面」提示段(下一 invoke 的 system,pin 段跨压缩,轮末清除);幂等可重复调 */
   notifyHostChange(opts?: { reason?: string }): void;
+  /** 撤销全部一次性授权(4.26):清空会话级授权集,后续调用恢复逐次确认;授权随 switchSession/resetSession 自动失效 */
+  revokeApprovalGrants(): void;
   /** content-proposals(4.22+):宿主裁决回传 → 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
   resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean;
   /** content-proposals:只读状态投射(未配置恒 null) */

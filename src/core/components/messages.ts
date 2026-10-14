@@ -99,6 +99,8 @@ export interface DialogMessages {
   recommendPrefix: string         // 推荐 / Recommend:(值在后)
   approve: string
   deny: string
+  approveRemember: string      // 允许并不再询问(本会话)(4.26 一次性授权;approval.remember 开才有)
+  approveRememberHint: string  // 同上,title 悬停说明(授权范围与失效条件)
   toolConfirmPrefix: string       // 需确认工具调用: / Confirm tool call:
   viewArgs: string
   collapseArgs: string
@@ -343,6 +345,8 @@ export const MESSAGES_ZH_CN: DialogMessages = {
   recommendPrefix: ' 推荐:',
   approve: '允许',
   deny: '拒绝',
+  approveRemember: '允许并不再询问',
+  approveRememberHint: '允许本次,且本会话内不再询问此工具的调用(切换会话或重置后恢复询问)',
   toolConfirmPrefix: '需确认工具调用:',
   viewArgs: '查看参数',
   collapseArgs: '收起参数',
@@ -584,6 +588,8 @@ export const MESSAGES_EN_US: DialogMessages = {
   recommendPrefix: ' Recommend:',
   approve: 'Allow',
   deny: 'Deny',
+  approveRemember: 'Allow & don\'t ask again',
+  approveRememberHint: 'Allow now and skip confirmation for this tool until the session ends (switch/reset restores asking)',
   toolConfirmPrefix: 'Confirm tool call:',
   viewArgs: 'View args',
   collapseArgs: 'Collapse args',

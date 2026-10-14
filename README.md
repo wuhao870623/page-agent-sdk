@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3825%20asserts-brightgreen.svg)](#self-tests)
+[![tests](https://img.shields.io/badge/self%20tests-3841%20asserts-brightgreen.svg)](#self-tests)
 
 ---
 
@@ -260,7 +260,7 @@ ChatDialog, MessageContent, CodePreview, SkillPanel, DebugDrawer, useChat
 | **Capability toggles** | `capabilities` | `{planning?,dataOps?,fetch?,skills?,vfs?,summarization?,memory?,subagent?,verify?,focus?}` | Default all on (`verify` default off, opt-in; `focus` = context focus for refining one component, default on); `false` to turn off |
 | | `permissions` | `PermissionRule[]` | Scope whitelist (first-match-wins, default off) |
 | | `humanConfirm` | `boolean` · default `true` | Proactive inquiry (AI asks when uncertain/multi-plan) |
-| | `approval` | `{tools?,confirm?,timeoutMs?,humanConfirmTool?}` · default off | Passive confirm whitelist (pre-write allow/deny) |
+| | `approval` | `{tools?,confirm?,remember?,timeoutMs?,humanConfirmTool?}` · default off | Passive confirm whitelist (pre-write allow/deny); `remember:true` adds "Allow & don't ask again (this session)" to the bar — session-scoped one-time grants, revoked via `sdk.revokeApprovalGrants()`, cleared on session switch/reset |
 | | `checkpoint` | `boolean \| {maxCheckpoints?,auto?}` · default off | Session-level rollback (`auto` default `true`) |
 | | `verify` | `{check?,maxAttempts?,adversarial?}` | Needs `capabilities.verify:true`; `check` omitted → `createWriteBackCheck` (read-back root auto-bound to `data.bind`, adapts to `sdk.setData` runtime swap) |
 | **Subagents** | `subagent` | `{allowedTools?,systemPrompt?,temperature?,llm?,maxDepth?·1,maxParallel?·4}` | Runtime ad-hoc delegation (`spawn_agent`/`spawn_agents`) |

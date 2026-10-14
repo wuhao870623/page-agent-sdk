@@ -33,9 +33,11 @@ type StreamFn = (messages: AgentMessage[], onEvent: StreamHandler, signal?: Abor
 export interface PendingApproval {
   toolName: string
   args: any
-  resolve: (approved: boolean | string) => void
+  resolve: (approved: boolean | string | import('../harness/approval').ApprovalGrantResolve) => void
   /** write 审批 diff 预览(ui-quick-wins Q3;approval_request 载荷透传;无则 undefined 走 args JSON 兜底呈现) */
   preview?: import('../harness/approval').ApprovalWritePreview
+  /** 一次性授权入口可见(approval.remember 开启时载荷透传;确认条据此显示「允许并不再询问(本会话)」) */
+  remember?: boolean
 }
 
 /** useChat 选项(E1 API 面收口:抽为命名接口供 types/ 对齐导出) */
@@ -224,6 +226,7 @@ export function useChat(opts: UseChatOptions = {}) {
                 args: event.args,
                 resolve: event.resolve,
                 ...(event.preview ? { preview: event.preview } : {}),
+                ...(event.remember ? { remember: true } : {}),
               }
               break
             }
@@ -410,8 +413,9 @@ export function useChat(opts: UseChatOptions = {}) {
     pendingApproval.value = null
   }
 
-  /** 人工确认:用户点「允许」(true) / 「拒绝」(false) / 选某方案(string) → 收口挂起的 approval_request */
-  function resolveApproval(approved: boolean | string) {
+  /** 人工确认:用户点「允许」(true) / 「拒绝」(false) / 选某方案(string) /
+   *  「允许并不再询问(本会话)」({approved:true, remember:true},4.26 一次性授权)→ 收口挂起的 approval_request */
+  function resolveApproval(approved: boolean | string | import('../harness/approval').ApprovalGrantResolve) {
     const p = pendingApproval.value
     if (!p) return
     pendingApproval.value = null

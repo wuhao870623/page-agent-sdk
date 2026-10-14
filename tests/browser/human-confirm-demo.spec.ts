@@ -219,3 +219,68 @@ test.describe('human-confirm-demo: write 审批 diff 预览(ui-quick-wins Q3,?pr
     await waitForAgentIdle(page)
   })
 })
+
+test.describe('human-confirm-demo: 一次性授权(?remember=1,4.26 approval.remember)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/examples/human-confirm-demo/?remember=1')
+    await page.waitForSelector('.chat-dialog')
+    await clearChat(page)
+  })
+
+  test('「允许并不再询问」→ 本次执行 + 会话内第二次 write 免确认直通', async ({ page }) => {
+    await mockLlm(page, [
+      { tool_calls: [{ name: 'write', arguments: { value: { theme: 'night-purple', density: 'compact', radius: 6 } } }] },
+      { text: '第一次完成。' },
+      { tool_calls: [{ name: 'write', arguments: { value: { theme: 'warm-orange', density: 'cozy', radius: 12 } } }] },
+      { text: '第二次完成(未经确认条)。' },
+    ])
+    await fillInput(page, '换成暗夜紫')
+    await clickSend(page)
+
+    // 确认条出现第三按钮(仅 remember 开);点击 = 允许本次 + 授予会话级免确认
+    await page.waitForSelector('[data-test="approval-remember"]', { timeout: 15_000 })
+    await expect(page.locator('[data-test="approval-remember"]')).toBeEnabled()
+    await page.click('[data-test="approval-remember"]')
+    await waitForAgentIdle(page)
+    expect(await page.evaluate(() => (window as any).appConfig.theme)).toBe('night-purple')
+
+    // 第二轮:同会话再 write —— 已授权直通,确认条根本不出现,write 直接生效
+    await fillInput(page, '再换成暖橙')
+    await clickSend(page)
+    await waitForAgentIdle(page)
+    await expect(page.locator('[data-test="approval-remember"]')).toHaveCount(0)
+    await expect(page.locator('[data-test="approval-allow"]')).toHaveCount(0)
+    expect(await page.evaluate(() => (window as any).appConfig.theme)).toBe('warm-orange')
+  })
+
+  test('默认关(无 ?remember)→ 确认条不出现授权入口', async ({ page }) => {
+    await page.goto('/examples/human-confirm-demo/')
+    await page.waitForSelector('.chat-dialog')
+    await clearChat(page)
+    await mockLlm(page, [
+      { tool_calls: [{ name: 'write', arguments: { value: { theme: 'night-purple', density: 'compact', radius: 6 } } }] },
+      { text: '完成。' },
+    ])
+    await fillInput(page, '换成暗夜紫')
+    await clickSend(page)
+    await page.waitForSelector('[data-test="approval-allow"]', { timeout: 15_000 })
+    await expect(page.locator('[data-test="approval-remember"]')).toHaveCount(0)
+    await page.click('[data-test="approval-allow"]')
+    await waitForAgentIdle(page)
+  })
+
+  test('refuse 预览态 × remember:授权入口与允许同禁(批准必失败的操作无意义)', async ({ page }) => {
+    await page.goto('/examples/human-confirm-demo/?remember=1&preview=fail')
+    await page.waitForSelector('.chat-dialog')
+    await clearChat(page)
+    await mockLlm(page, [
+      { tool_calls: [{ name: 'write', arguments: { value: { theme: 'night-purple', density: 'compact', radius: 6 } } }] },
+      { text: '被拒后收口。' },
+    ])
+    await fillInput(page, '换个风格')
+    await clickSend(page)
+    await page.waitForSelector('[data-test="approval-remember"]', { timeout: 15_000 })
+    await expect(page.locator('[data-test="approval-remember"]')).toBeDisabled()
+    await expect(page.locator('[data-test="approval-allow"]')).toBeDisabled()
+  })
+})

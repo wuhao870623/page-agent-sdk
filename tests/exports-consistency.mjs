@@ -32,7 +32,7 @@ const typesExports = extractExports(typesContent)
 // type-only 辅助类型:d.ts 为 TS 使用者声明,但非 src/core/index.ts 运行时导出(audit P1-27/A 专项:多余名改 fail 需此白名单排除)
 const TYPES_ONLY_ALLOWLIST = new Set([
   'ChatDialogSections', 'ChatDialogProps', 'DebugDrawerProps', 'ChatModelLike',
-  'SkillExecSpec', 'SkillToolFactory', 'Checkpoint', 'SessionOptions', 'HumanConfirmOptions',
+  'SkillExecSpec', 'SkillToolFactory', 'Checkpoint', 'SessionOptions', 'HumanConfirmOptions', 'ApprovalGrantResolve',
 ])
 const missingInTypes = [...srcExports].filter(n => !typesExports.has(n))
 const extraInTypes = [...typesExports].filter(n => !srcExports.has(n))

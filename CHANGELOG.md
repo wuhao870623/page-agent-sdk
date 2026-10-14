@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [4.26.0] - 2026-10-14
+
+### Added
+
+- **approval 一次性授权(会话级免确认原语)**:`approval.remember: true`(opt-in 默认关)—— 确认条新增「允许并不再询问(本会话)」次级按钮,用户点它 = 允许本次并授予**会话级**免确认;该工具名进装配层持有的授权集,本会话内后续调用免确认直通(**先于 `confirm` 回调判定** —— 授权就是用户对「这个动作别再问了」的显式回答)。批量写场景(标注连发/连续编辑)不再逐条点允许。安全面:拒绝/超时/abort 永不授权(对象形裁决 `{approved:false, remember:true}` 按拒绝处理);预览 refuse 态下授权按钮与「允许」同禁(批准必失败的操作无意义);授权随 `switchSession`/`resetSession` 自动失效;`sdk.revokeApprovalGrants()` 随时撤销(留痕 `approval_grants_revoked`);直通留痕 `approval_auto_allowed`(debugLogs 时间线自解释)。`approval_request` 载荷新增 `remember?: boolean`(UI 据此显隐第三按钮;headless 自建确认通道同样可消费,`resolve({approved:true, remember:true})` 即授权);`inspect().approvals = { remember, grantedTools }` 反射授权面;`resolveApproval`/`PendingApproval.resolve` 签名扩 `ApprovalGrantResolve` 对象形(旧 boolean/string 语义逐字不变)。默认关 = 逐次确认,现行为零变化。selftest sec-137(+16)/ e2e hang-feedback(+9)/ browser human-confirm-demo(+3);计数 3841/1303/188。
+
 ## [4.25.4] - 2026-10-10
 
 ### Fixed

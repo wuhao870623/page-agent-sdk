@@ -18,6 +18,16 @@ export interface ApprovalOptions {
   tools?: string[]
   /** 自定义判定(优先于 tools);返回 true 需确认 */
   confirm?: (name: string, args: any) => boolean
+  /**
+   * 一次性授权(4.26,opt-in 默认关):开启后 approval_request 载荷带 remember 标志,内置确认条
+   * 出现「允许并不再询问(本会话)」入口;用户点它 → 该工具名进 grants 集,**本会话内**后续调用
+   * 免确认直通(先于 confirm 回调判定 —— 授权就是用户对「这个动作别再问了」的显式回答)。
+   * grants 集由装配层注入并持有生命周期:switchSession/resetSession 清空,宿主可经
+   * sdk.revokeApprovalGrants() 主动撤销。拒绝/超时/abort 永不授权。默认关 = 现行为逐次确认,零变化。
+   */
+  remember?: boolean
+  /** 会话级授权集(装配层持有;中间件只读写,不管理生命周期) */
+  grants?: Set<string>
   /** 超时毫秒(用户未响应自动拒绝);0 = 不超时。SDK 装配层对无 UI 路径注入默认 30s(flow-robustness P1#3) */
   timeoutMs?: number
   /** 超时自动拒的留痕回调(observable 接线由调用方负责;abort/用户先收口不触发) */
@@ -30,6 +40,12 @@ export interface ApprovalOptions {
    * 内置 dryRun 预览(approval.preview 显式开才接)。修前装配层把集成方回调静默覆盖丢弃。
    */
   previewWrite?: (name: string, args: any) => ApprovalWritePreview | null
+}
+
+/** 授权形裁决(仅 UI「允许并不再询问」入口产它):approved=true 且 remember=true → 允许本次并授予会话级免确认 */
+export interface ApprovalGrantResolve {
+  approved: boolean
+  remember?: boolean
 }
 
 /** write 审批 diff 预览项(ui-quick-wins Q3):一个被写路径的 old→new 摘要 */
@@ -62,18 +78,29 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
   return {
     name: 'approval',
     wrapToolCall: async (ctx: ToolCallContext, next: (ctx: ToolCallContext) => Promise<ToolExecResult>) => {
+      // 会话级一次性授权直通(先于 needConfirm):已授权的工具名免确认执行,留痕供时间线自解释
+      if (opts.remember && opts.grants?.has(ctx.name)) {
+        ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_auto_allowed', toolName: ctx.name } })
+        return next(ctx)
+      }
       if (!needConfirm(ctx.name, ctx.args)) return next(ctx)
 
       return new Promise<ToolExecResult>((resolve) => {
         let settled = false
         const cleanup: Array<() => void> = []
 
-        const finish = (approved: boolean | string) => {
+        const finish = (approved: boolean | string | ApprovalGrantResolve) => {
           if (settled) return
           settled = true
           cleanup.forEach((fn) => fn())
-          ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_resolved', toolName: ctx.name, approved: approved === false ? false : String(approved).slice(0, 60) } })
-          if (approved === false) {
+          // 对象形 = 授权入口:{approved:true, remember:true} 允许本次并授予会话级免确认;
+          // {approved:false} 按拒绝处理(不授予)。boolean/string 语义与旧版逐字一致
+          const grantResolve = typeof approved === 'object' && approved !== null ? approved : null
+          const ok = grantResolve ? grantResolve.approved === true : approved !== false
+          const granted = Boolean(grantResolve?.remember) && ok
+          if (granted) opts.grants?.add(ctx.name)
+          ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_resolved', toolName: ctx.name, approved: !ok ? false : granted ? 'granted' : String(approved).slice(0, 60) } })
+          if (!ok) {
             // 兼容 vfs path / 数据 jsonPath / write 的 patch.jsonPath / patches[],让 LLM 知道被拒的精确范围
             const a = (ctx.args ?? {}) as Record<string, any>
             const scope =
@@ -85,7 +112,7 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
               status: 'error' as const,
             })
           } else {
-            // true 或 string(选方案)→ 视为允许,执行工具
+            // true / string(选方案)/ {approved:true,…}(可能带授权)→ 视为允许,执行工具
             next(ctx).then(resolve, (e: any) =>
               resolve({ content: `工具执行失败:${e?.message ?? e}`, status: 'error' as const }),
             )
@@ -122,7 +149,8 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
           try { preview = opts.previewWrite(ctx.name, ctx.args) ?? undefined } catch { preview = undefined }
         }
 
-        // 发确认请求事件:UI 调 resolve(approved) 收口;确认接管者调 hold() 取消无响应计时
+        // 发确认请求事件:UI 调 resolve(approved) 收口;确认接管者调 hold() 取消无响应计时。
+        // remember 标志(4.26 一次性授权):UI 据此显隐「允许并不再询问(本会话)」入口
         ctx.emit?.({
           type: 'approval_request',
           toolName: ctx.name,
@@ -130,6 +158,7 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
           resolve: finish,
           hold,
           ...(preview ? { preview } : {}),
+          ...(opts.remember ? { remember: true } : {}),
         } as any)
         // 挂起/收口双留痕(2026-09-02,nested-demo 诊断驱动):exportDiagnostics/debugLogs 此前只见
         // tool_call 派发后无限 'running' 无 tool_result,无法判断「卡在等确认」—— 现在挂起即见

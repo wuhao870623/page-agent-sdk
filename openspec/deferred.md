@@ -749,3 +749,7 @@ A3 曾写「116 个模块」,实测 sec-*.ts = **115**(runner import 同数)—�
 ### [2026-09-29] workingMemory 扩展到页面读工具(防同话题追问重复检索)— ❌ 否决(服从率存疑 + 方向风险)
 
 **评估结论**:learning 真机诊断(2026-09-29)实证「同话题追问重复检索」浪费(T4 与 T3 同查询重跑 `dom_search` + `read_page`,+2 轮;T1 已读全文在历史、T3 已 get_dom §3.2 表格的前提下)。候选 = `CAPTURE_TOOLS`(现仅 `read/query_data/search_data`,workingMemory.ts:21)扩到 `read_page/dom_search/dom_info/get_dom`,注入「近期已读 + 无失效通知」事实提示。否决三条:① **服从率存疑** —— flash 对同类文本提示服从率低(learning prompt 已有「已读过的内容直接用,不必再读页面」,T4 照读),SDK 再加一段大概率同样结局;② **方向风险** —— 同诊断里页面 mid-session 被提案 apply 悄悄改过(§11.1 上线),T3/T4 的重读恰好保证答案新鲜;SDK 只能诚实陈述「读过什么、何时」,**说不了「页面没变」**(notifyHostChange 漏报是常态风险,往「信历史」推会放大此类错误);③ **成本收益不匹配** —— 2 轮 flash ≈ +3~6s、前缀缓存命中、token 增量小,不满足「真机实证驱动机制化」门槛。**重启触发**:真机基线(docs-qa/uispec)显示重复检索成为轮次/token 成本主因 —— 届时优先把失效信号做准(「须重读」在页面真变时必然出现),而非加提示;`--baseline-diff` 的 toolCount 维度可直接量化这类改动的效果。
+
+## 2026-10-14(approval 一次性授权落地时的伴生残项)
+
+- **`approval_resolved` 外发事件**(宿主外部观察裁决结果):现状基础 = approval_pending/approval_resolved 双留痕已进 debugLogs(`approval.ts` logSink),`approval_request` 刻意不外发(防集成方误调 resolve 双重收口,events.ts 过滤);暂缓理由 = 首个消费方(learning 门户)的「一次性授权」走确认条内建入口,不需要外部观察裁决;外发 resolve 观察面要防与 hold()/resolve 的双重收口误用,需设计只读载荷形态;重启触发 = 集成方需要在自己的 UI/埋点里联动「用户点了允许/授权」(如宿主侧授权管理面板、审计上报),或第二个集成方提出同款需求。

@@ -263,6 +263,12 @@ export interface ChatSdkOptions {
   approval?: {
     tools?: string[]
     confirm?: (name: string, args: any) => boolean
+    /**
+     * 一次性授权(4.26,opt-in 默认关):开启后确认条出现「允许并不再询问(本会话)」入口,用户点它 →
+     * 该工具名进会话级授权集,本会话内后续调用免确认直通(先于 confirm 回调判定)。授权随
+     * switchSession/resetSession 失效,可经 `sdk.revokeApprovalGrants()` 撤销;拒绝/超时/abort 永不授权。
+     */
+    remember?: boolean
     timeoutMs?: number
     /** 是否装载 request_human_confirmation 主动确认工具(传 approval 时默认 true;false 关闭) */
     humanConfirmTool?: boolean
@@ -516,6 +522,8 @@ export interface ChatSdk {
   clearQuote(): void
   /** S2 宿主变更通知:SPA 换文/路由切换/tab 切换后调用 —— 流内页面读结果置过期占位,跨轮注入一次性「重读当前页面」提示段(下一 invoke 的 system,轮末清除);幂等可重复调 */
   notifyHostChange(opts?: { reason?: string }): void
+  /** 撤销全部一次性授权(4.26):清空会话级授权集,后续调用恢复逐次确认;授权随 switchSession/resetSession 自动失效 */
+  revokeApprovalGrants(): void
   /** content-proposals(4.22+):宿主裁决回传(用户点「应用/放弃」后调)→ 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
   resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean
   /** content-proposals:只读状态投射(pending 轻投影/累计 applied·discarded/最近裁决;未配置恒 null) */
