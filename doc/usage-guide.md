@@ -1863,6 +1863,8 @@ applyBtn.onclick = () => { save(p.content); sdk.resolveProposal(p.id, 'applied',
 
 **与 4.20 语义标记的联动**(自动,无需配置):`read_content` 自动进 `notifyHostChange` 失效面(换文后旧读取过期)、`propose_content` 自动进零工具门禁「待确认」口径(提案后谎报「已修改完成」被事实清单戳穿回灌)。
 
+**读通道故障的口径(4.26.1+)**:`read` 抛错(内容源不可达 / 宿主服务未运行 / 权限拒绝)时两工具都回 SDK 统一形态 `ERROR: {"error":"CONTENT_READ_FAILED","message":"…","hint":"…"}` —— 原始异常串透传(如 `TypeError: Failed to fetch`),hint 明说「原样重试不会成功」,模型不再对着同一句错误空转;同时进 debugLogs(`stage:'proposal'`, `kind:'read_failed'`, `tool` 区分 read/propose),排障时不必翻 ToolMessage。**`read` 返回 `null` 不是故障**:那是宿主在说「当前没有可编辑对象」,回原文案、不套 `ERROR`、不留 `read_failed`。两工具的集成方回调(`read`/`onProposal`)受 `toolTimeoutMs`(默认 120s)看门狗兜底 —— 永不 settle 时 recoverable 回灌而非拖死整轮。
+
 **宿主面板渲染**:`onProposal` 收到的 `ReviewableProposal` 已含 `diff.rows`(逐行 diff 行序列)+ 统计,直接渲染即可;`lineDiff` / `applyProposalOps` / `hashContent` 纯函数也从包导出(预演/测试缝用)。完整示例:`examples/proposals-demo`(textarea 真相源 + 折叠 diff 面板 + 应用/放弃 + browser e2e 全链)。
 
 ## 7. 高级:自定义中间件

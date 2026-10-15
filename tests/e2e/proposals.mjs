@@ -190,6 +190,31 @@ export async function run() {
     sdk.unmount()
   }
 
+  console.log('[e2e:proposals] 读通道故障:结构化 ERROR 回灌 + debugLogs 留痕(4.26.1)')
+  {
+    // 2026-10-14 真机:宿主 dev server 未运行 → read 回调抛 Failed to fetch,模型原样重调 5 次;
+    // 且诊断里的 debugLogs 一条都没记 —— 本条钉住「回执结构化 + 留痕」两条(经 createChatSdk 日志接线)
+    const model = new StubChatModel([
+      { toolCalls: [{ name: 'read_content', args: {} }] },
+      { text: '读取通道故障,已如实告知用户,稍后可重试。' },
+    ])
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-prop-readfail', storage: 'memory', llm: model,
+      capabilities: MIN_CAPS, autoTitle: false,
+      proposals: { read: () => { throw new TypeError('Failed to fetch') }, onProposal: () => 'ok' },
+    })
+    await sdk.mount()
+    await sdk.send('改一下这篇')
+    const reads = toolContentsOf(model.lastMessages, 'read_content')
+    assert(reads.length === 1 && reads[0].startsWith('ERROR: ') && reads[0].includes('CONTENT_READ_FAILED'),
+      `读故障 → 结构化 ERROR 回灌(SDK 统一口径),实际:${reads[0]?.slice(0, 44)}`)
+    assert(reads[0].includes('TypeError: Failed to fetch') && reads[0].includes('原样重试不会成功'),
+      '回执含原始错误串 + 勿重试提示')
+    const logged = sdk.debugLogs.value.find((l) => l.data?.stage === 'proposal' && l.data?.kind === 'read_failed')
+    assert(!!logged && logged.data.tool === 'read', 'debugLogs 留痕 stage=proposal kind=read_failed(修前静默)')
+    sdk.unmount()
+  }
+
   void z
   return { pass: ctx.pass, fail: ctx.fail }
 }

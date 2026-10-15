@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [4.26.1] - 2026-10-15
+
+### Fixed
+
+- **content-proposals 读通道故障:回执结构化 + 留痕**(真机诊断驱动,2026-10-14)—— 宿主 `read` 回调抛错时(实例:learning 门户 dev server 未运行 → `TypeError: Failed to fetch`),`read_content` / `propose_content` 两个失败分支此前回**裸中文串且零日志**:同文件读成功有 `deps.log('read')`、基底漂移有 `deps.log('rejected')`,唯独「读不到」静默 —— 集成方导出的诊断里 32 条 debugLogs **没有一条**记录该故障,排障只能翻 ToolMessage。现两处收敛为一个 `readFailure`:① `deps.log('read_failed', { tool, message })` 留痕(沿用 `stage:'proposal'` 既有族新增 kind,`tool` 字段分流 read/propose);② 回执换 SDK 统一口径 `ERROR: {json}`(与 `read_page` 等一致,`code: 'CONTENT_READ_FAILED'`,原始错误串透传)+ hint 明说「原样重试不会成功」。**动机是实测行为**:旧文案「请如实告知用户,不要编造内容」压不住重试倾向 —— 同一句错误被原样重调 5 次、多跑 4 个往返。边界:`read` 返回 `null`(宿主说「没有可编辑对象」)与抛错**仍分流**,空结果不套 `ERROR`(那是正常空态,不该引导模型放弃);事件面零新增(与 `rejected`/`replaced` 一致:只留痕,不新增公共事件)。**另**:`toolWatchdog.ts` 豁免面注记补一句「『内置』不等于豁免,判据是有没有自有闸」—— content-proposals 两工具是内置壳 + 集成方回调,看门狗标记 4.22 起就在 `createProposalChannel` 工厂内(本次仅加注记 + 回归断言,防后人照抄「内置 = 豁免」误判)。selftest sec-138(+15)/ e2e proposals(+3);selftest 3841 → **3856** / e2e 1303 → **1306**(browser 188 未变)。
+
 ## [4.26.0] - 2026-10-14
 
 ### Added

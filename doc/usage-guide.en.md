@@ -1144,6 +1144,8 @@ Once configured the model gets two tools:
 
 **Interop with the 4.20 semantic flags** (automatic, zero config): `read_content` joins the `notifyHostChange` invalidation face (stale after navigation); `propose_content` joins the zero-tool gate's "awaiting confirmation" fact-sheet wording (claiming "changes complete" after merely proposing gets exposed and fed back).
 
+**Read-channel failure contract (4.26.1+)**: when `read` throws (content source unreachable / host service not running / permission denied) both tools now reply in the SDK's uniform shape `ERROR: {"error":"CONTENT_READ_FAILED","message":"…","hint":"…"}` — the original exception string is passed through (e.g. `TypeError: Failed to fetch`) and the hint states plainly that retrying as-is will not succeed, so the model stops spinning on the same error. The failure is also logged (`stage:'proposal'`, `kind:'read_failed'`, with `tool` distinguishing read/propose) — no more digging through ToolMessages. **`read` returning `null` is not a failure**: that is the host saying "there is no editable object right now" — original wording, no `ERROR`, no `read_failed` log. Both host callbacks (`read`/`onProposal`) are covered by the `toolTimeoutMs` watchdog (120s default): a promise that never settles is fed back as recoverable instead of hanging the turn.
+
 **Rendering the panel host-side**: the `ReviewableProposal` handed to `onProposal` already contains `diff.rows` (line-diff rows) + stats — render directly. `lineDiff` / `applyProposalOps` / `hashContent` pure functions are also package exports (for previews / test seams). Full example: `examples/proposals-demo` (textarea as source of truth + collapsible diff panel + apply/discard + browser e2e).
 
 ## 7. Custom middleware

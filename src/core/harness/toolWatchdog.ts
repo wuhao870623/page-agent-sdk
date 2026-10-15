@@ -11,6 +11,11 @@
  * - 委派类(use_<id> / spawn_agent / spawn_agents)属子 agent 生命周期域(真 LLM 单次委派 >120s 常态);
  * - dataOps 写工具的 conflict ask 挂起等人工裁决(可达分钟级,由 conflictPolicy/abort 联动收口)。
  *
+ * ⚠️ 「内置」不等于豁免:判据是**有没有自有闸**,不是谁造的。content-proposals 的
+ * read_content / propose_content 是内置壳 + 集成方回调(read/onProposal),无自有闸 → 在
+ * `createProposalChannel` 工厂内打标(proposals.ts 末尾)。新增内置工具时若 I/O 落集成方回调上,
+ * 照此办理 —— 别照搬「内置 = 豁免」这句话(2026-10-15 排障时就因漏看工厂那行误判过一次)。
+ *
  * 实现 = 显式标记:defineTool / createChatSdk 装配(user/actions/skill 工厂)/ rag retriever 包装等
  * 集成方入口打标记,coreExecTool 只对带标记工具 race `toolTimeoutMs`(默认 120s,0=关)。标记挂在工具
  * 对象上随引用走(buildChildTools 复用同一实例)→ 子 agent 栈自动同覆盖,无需额外管道。

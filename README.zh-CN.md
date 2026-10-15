@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3841%20asserts-brightgreen.svg)](#自测)
+[![tests](https://img.shields.io/badge/self%20tests-3856%20asserts-brightgreen.svg)](#自测)
 
 ---
 
@@ -179,7 +179,7 @@ CDN 零配置：`<script src="https://unpkg.com/page-agent-sdk"></script>` → `
 | 🖍 DOM 编辑 | `dom_edit` 批量原子操作(set_text/set_html/set_attr/add_class/set_style/insert/remove/move/highlight)+ `dom_restore` 快照回滚(栈 20 批);唯一 selector 纪律(多匹配拒)/危险闸(script·on*·javascript: 拒)/SDK 自身 DOM 保护/单根快照 256KB 上限;改动为会话临时态,数据驱动页面仍走 write | `capabilities: { domInspect: true, domEdit: true }` |
 | 🔁 宿主变更通知(4.18) | `sdk.notifyHostChange({reason?})`:SPA 换文/路由切换后调 —— 流内页面读结果(read_page/dom_search/dom_info/get_dom/take_screenshot)置过期占位(通知后新读不受影响)+ 一次性「须重读当前页面」提示段;数据槽读不受影响;`inspect().hostReadsInvalidated` 累计 | 路由切换 handler 调一次 |
 | 📡 宿主导航自动报案(4.21) | `hostWatch: true`:URL 一变(hashchange/popstate)自动触发 notifyHostChange 全链路 —— 把「防线靠宿主记得调」变「防线自动」;pushState patch/title 观察 opt-in;去抖合并 + `ignore` 钩子;服务端/headless 特性探测静默 no-op(`inspect().hostWatch` 反射)。另:dom_edit/dom_restore 落地后旧页面读自动失效(默认开) | `hostWatch` |
-| 📝 内容提案-评审-应用(4.22) | `proposals: { read, onProposal }`:数据槽外内容的受控修改 —— `read_content`(基底+hash)→ `propose_content`(**增量 ops**:字面锚唯一命中/原子,token 只花在改动上;baseHash 漂移显式拒)→ 宿主 diff 面板 → 用户点应用才写回;`sdk.resolveProposal` 裁决闭环(事件 + 下轮结局告知);模型零写权限、未配置零注册;`lineDiff/applyProposalOps/hashContent` 纯函数导出 | `proposals` + `sdk.resolveProposal` |
+| 📝 内容提案-评审-应用(4.22) | `proposals: { read, onProposal }`:数据槽外内容的受控修改 —— `read_content`(基底+hash)→ `propose_content`(**增量 ops**:字面锚唯一命中/原子,token 只花在改动上;baseHash 漂移显式拒)→ 宿主 diff 面板 → 用户点应用才写回;`sdk.resolveProposal` 裁决闭环(事件 + 下轮结局告知);模型零写权限、未配置零注册;`lineDiff/applyProposalOps/hashContent` 纯函数导出;**(4.26.1+)读通道故障回结构化 `ERROR: {code:'CONTENT_READ_FAILED'}` + 勿重试提示 + `read_failed` 留痕**(`read` 返回 `null` 仍是正常空态,不算故障) | `proposals` + `sdk.resolveProposal` |
 | ✏️ 编辑消息重跑(4.25) | hover 任意已发送 user 消息点「编辑」→ 气泡内改文(Enter 保存/Esc 取消,IME 合成期不误发)→ 截断其后历史从该点重跑;焦点/图片/引用附带字段保留;生成中点编辑先自动停止;`roundSeq` 代次守卫使旧轮异步收口失效(不拆新轮状态);自建 UI 可编程式用 `useChat.editAndResend(index, newContent)` | 内置 UI 自动;自建 UI 走 `useChat` |
 | 🛡 页面断言门禁(4.18) | 「本页写了/原文提到…」× 本轮零页面依据(含截图)× 非诚实不存在声明 → 回灌「先读页面再断言 + 事实清单」(独立预算 ≤2,超限 EXHAUSTED observable);仅 domInspect 开启装配(数据槽误伤路径结构切断) | 随 `domInspect` 自动 |
 | 📍 引用 DOM 锚点(4.18) | 划词捕获一并记录选区位置(块级 selector/块内偏移/出现序号/最近标题/捕获时 URL),引用块附 `[位置: …]` 元信息行 → `read_page({selector})` 直达;捕获与发送 URL 不一致自动标「锚点属于另一文档」;锚点是提示不是保证(失效回退 dom_search) | 随划词捕获自动;`setQuote` 第三参可自定义 |

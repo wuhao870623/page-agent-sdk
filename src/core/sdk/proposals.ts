@@ -12,6 +12,7 @@ import { tool } from '@langchain/core/tools'
 import type { StructuredToolInterface } from '@langchain/core/tools'
 import { z } from 'zod'
 import { applyProposalOps, hashContent, lineDiff, type DiffRow, type ProposalOp } from '../tools/proposalOps'
+import { toolError } from '../tools/toolError'
 import { markWatchdogTools } from '../harness/toolWatchdog'
 
 /** 送达评审面板的提案(SDK 已校验基底、已应用 ops、已算 diff;宿主渲染面板 + 用户裁决) */
@@ -140,11 +141,30 @@ export function createProposalChannel(
     return true
   }
 
+  /**
+   * 读通道故障回执(2026-10-15 修)—— 留痕 + 结构化 ERROR。
+   *
+   * 修前两处读失败分支都是**裸中文串且零日志**:成功有 `deps.log('read')`、基底漂移有
+   * `deps.log('rejected')`,唯独「读不到」静默 —— 排障只能翻 ToolMessage,诊断导出的 debugLogs
+   * 里一条记录都没有。而 `请如实告知用户` 也压不住模型的重试倾向:2026-10-14 实测同一句
+   * `读取失败:TypeError: Failed to fetch`(宿主 dev server 未运行)被原样重调 5 次,多跑 4 个往返。
+   * 故改为 SDK 统一口径 `ERROR: {json}`(与 read_page 等一致)+ hint 明说「原样重试不会成功」。
+   */
+  const readFailure = (tool: 'read' | 'propose', message: string, err: unknown): string => {
+    const detail = String(err ?? '未知错误')
+    deps.log('read_failed', { tool, message: detail.slice(0, 300) })
+    return toolError({
+      code: 'CONTENT_READ_FAILED',
+      message: `${message}:${detail}`,
+      hint: '这是宿主读取通道故障(内容源不可达 / 宿主服务未运行等),不是内容本身的问题 —— 原样重试不会成功;请如实告知用户并说明稍后可重试,不要编造内容。',
+    })
+  }
+
   const readTool = tool(
     async () => {
       const cur = await readChannel(c)
       if (cur && typeof cur === 'object' && '__err' in (cur as Record<string, unknown>)) {
-        return `读取失败:${String((cur as { __err: unknown }).__err ?? '未知错误')}。请如实告知用户,不要编造内容。`
+        return readFailure('read', `读取当前${c.contentKind}失败`, (cur as { __err: unknown }).__err)
       }
       const r = cur as { content?: unknown; label?: unknown } | null
       if (!r || typeof r.content !== 'string') return '当前没有可编辑的内容对象(宿主 read 返回空)。请如实告知用户,不要编造内容。'
@@ -174,7 +194,7 @@ export function createProposalChannel(
     async (args: { summary: string; baseHash: string; ops?: ProposalOp[]; content?: string }) => {
       const cur = await readChannel(c)
       if (cur && typeof cur === 'object' && '__err' in (cur as Record<string, unknown>)) {
-        return `提案被拒:读取当前内容失败(${String((cur as { __err: unknown }).__err ?? '未知错误')})。`
+        return readFailure('propose', `提案被拒:读取当前${c.contentKind}失败`, (cur as { __err: unknown }).__err)
       }
       const r = cur as { content?: unknown; label?: unknown } | null
       if (!r || typeof r.content !== 'string') return '提案被拒:当前没有可编辑的内容对象。'
