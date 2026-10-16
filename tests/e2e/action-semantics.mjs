@@ -161,5 +161,51 @@ export async function run() {
     assert(sdk.inspect().actions?.aliased_action?.hasParams === true, 'inspect().actions.hasParams 反射 schema 别名')
     sdk.unmount()
   }
+  console.log('[e2e:action-semantics] action-resolve-outcome:deferredWrite 裁决回传 → 下轮一次性段;未标记拒;switch 清;事件外发')
+  {
+    const events = []
+    const model = new StubChatModel([
+      { toolCalls: [{ name: 'propose_note_edit', args: { summary: '修错字', content: '--- title ---\n改正后的正文' } }] },
+      { text: '提案已送达,等你在面板确认。' },
+      { text: '修改已生效,按改后内容继续。' },
+      { text: 'done' },
+      { text: '新会话。' },
+    ])
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-action-resolve', storage: 'memory', llm: model,
+      capabilities: MIN_CAPS, autoTitle: false,
+      onEvent: (e) => { if (e?.type === 'action_resolved') events.push(e) },
+      actions: {
+        propose_note_edit: {
+          description: '提交笔记修改提案(用户确认才生效)', deferredWrite: true,
+          params: z.object({ summary: z.string(), content: z.string() }),
+          run: async () => '提案已送达,待确认。',
+        },
+        save_draft: { description: '保存(不标记)', run: async () => 'saved' },
+      },
+    })
+    await sdk.mount()
+    await sdk.send('帮我修错字') // 轮 1:提案送达(2 次模型调用:tool + 收口)
+    // 门禁与幂等:未标记拒 / 相同结局重报拒
+    assert(sdk.resolveAction('save_draft', 'applied') === false, '未标记 deferredWrite 的动作 → resolveAction 返 false')
+    assert(sdk.resolveAction('propose_note_edit', 'applied', '用户已应用,含手改') === true, 'deferred 动作 applied → 入队返 true')
+    assert(sdk.resolveAction('propose_note_edit', 'applied') === false, '相同结局重报 → 幂等 false')
+    await sdk.send('改好了吗') // 轮 2:裁决段注入
+    await sdk.send('还有别的吗') // 轮 3:一次性 —— 段消失
+    const seg = (i) => model.systemPrompts[i] ?? ''
+    assert(seg(2).includes('【宿主动作裁决结果】') && seg(2).includes('propose_note_edit') && seg(2).includes('采纳(已生效)') && seg(2).includes('用户已应用,含手改'),
+      `裁决后下一轮 system 注入结局段(动作名/已生效/detail),实际:${seg(2).slice(0, 80)}`)
+    assert(!seg(0).includes('宿主动作裁决结果') && !seg(1).includes('宿主动作裁决结果'),
+      '裁决前的轮次无段(注入只发生在裁决之后的第一轮)')
+    assert(!seg(3).includes('宿主动作裁决结果'), '一次性:再下一轮段消失(afterAgent 清空)')
+    assert(events.length === 1 && events[0].name === 'propose_note_edit' && events[0].outcome === 'applied' && events[0].detail === '用户已应用,含手改',
+      `action_resolved 事件恰好一次(name/outcome/detail),实际 ${events.length} 条`)
+    // switchSession 清队列:再裁决一笔 → 切会话 → 新会话首轮无段
+    assert(sdk.resolveAction('propose_note_edit', 'discarded') === true, '不同结局 = 新裁决入队(返 true)')
+    await sdk.switchSession()
+    await sdk.send('新会话第一句')
+    assert(!(model.systemPrompts[4] ?? '').includes('宿主动作裁决结果'), 'switchSession 清队列:新会话首轮无未送达裁决段')
+    sdk.unmount()
+  }
   return ctx.pass > 0 || ctx.fail === 0 ? { pass: ctx.pass, fail: ctx.fail } : { pass: ctx.pass, fail: ctx.fail }
 }

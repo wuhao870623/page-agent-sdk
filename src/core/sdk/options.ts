@@ -526,6 +526,10 @@ export interface ChatSdk {
   revokeApprovalGrants(): void
   /** content-proposals(4.22+):宿主裁决回传(用户点「应用/放弃」后调)→ 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
   resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean
+  /** deferredWrite 动作裁决回传(action-resolve-outcome,2026-10-16):结局入队 → 下轮一次性「宿主动作裁决结果」段
+   *  + action_resolved 事件 + debugLogs。名字键(同名字不同结局 = 新裁决覆盖;相同结局重报幂等 false);
+   *  严格罩 deferredWrite 名集(未标记/未知名 false + warn);裁决不打断在途轮;switch/reset 清未送达裁决 */
+  resolveAction(name: string, outcome: 'applied' | 'discarded', detail?: string): boolean
   /** content-proposals:只读状态投射(pending 轻投影/累计 applied·discarded/最近裁决;未配置恒 null) */
   readonly proposals: { pending: Array<{ id: string; summary: string; createdAt: number; added: number; removed: number }>; applied: number; discarded: number; lastResolved: { id: string; outcome: 'applied' | 'discarded'; summary: string; detail?: string; at: number } | null } | null
   /** 回退到最近一次正常 checkpoint(整体还原对话历史 + 主数据 + vfs + todos);需开启 checkpoint 选项,无可用 checkpoint 返回 false */

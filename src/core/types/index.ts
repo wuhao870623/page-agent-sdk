@@ -180,6 +180,7 @@ export type SdkEvent =
   | { type: 'focus_change'; focuses: import('../harness/state').Focus[] }
   | { type: 'proposal_pending'; id: string; summary: string; added: number; removed: number }
   | { type: 'proposal_resolved'; id: string; outcome: 'applied' | 'discarded'; summary: string }
+  | { type: 'action_resolved'; name: string; outcome: 'applied' | 'discarded'; detail?: string }
 
 /** token 用量(OpenAI 协议字段名) */
 export interface TokenUsage {

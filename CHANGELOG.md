@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [4.27.0] - 2026-10-16
+
+### Added
+
+- **deferredWrite 动作裁决回传 `sdk.resolveAction(name, outcome, detail?)`**(action-resolve-outcome,openspec change `2026-10-16-action-resolve-outcome`):4.20 的 `deferredWrite` 标记只做了「防谎报」半边(事实清单注记「待确认」),用户在工具调用之外采纳/放弃后模型一直不知道结果 —— learning 门户三处流(建议批注采纳面板、兴趣画像/助手技能草稿保存)README 明记「模型不知道用户采纳了没,防线只剩回执措辞」。现镜像 content-proposals 的 `resolveProposal` 补齐另一半:**严格罩 deferredWrite 名集**(未标记/未知名返 `false` + warn —— 「待确认」与「已确认」两口径必须罩同一批动作)/ **名字键**:同名字不同结局 = 新裁决覆盖旧笔(单挂起语义),相同结局重报幂等 `false` / `actionNotice` 中间件(**并立 proposalNotice 不泛化统一** —— 提案行文特化且已验证,搬动 = 无谓回归面):`augmentPrompt` 只读注段 + `afterAgent` 清空 = **下一轮一次性「宿主动作裁决结果」段**(段头与行为契约文案 SDK 定死:以此为准/已生效可作事实引用/被放弃不当完成/勿重复提议已生效内容,宿主只能给 `detail`;4.18 S1 幂等契约的正确写法,宿主自 roll 最易踩死的那类坑)/ `action_resolved` 事件 + debugLogs stage `action_resolved`(与 4.26.2 `action_failed` 同族)/ `switchSession`·`resetSession` 清队列、裁决 mid-round 到达落下一轮不中断在途流。`ChatSdkOptions` 零新配置项(有任一 deferredWrite 动作才装中间件;`resolveAction` 恒挂,零 deferred 动作对一切名字返 false)。selftest sec-139(+18)/ e2e action-semantics(+9);selftest 3861 → **3879** / e2e 1311 → **1320**(browser 188 未变)。
+
 ## [4.26.2] - 2026-10-16
 
 ### Fixed

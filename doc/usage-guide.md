@@ -603,6 +603,7 @@ createChatSdk({
 - **两个语义标记(4.20+,均可选;不标记 = 现行为零变化)**:
   - `readsHostState: true` —— 标记本 action 读取宿主态(如 `read_note_source` 读笔记源文):旧工具结果随 `sdk.notifyHostChange()` **替换为过期占位**(修前只有 read_page 等五个内置页面读工具享受,action 只靠 reason 文案口头告知,长对话仍可能被引用);页面断言门禁的「页面依据」计数也计入(调过它再断言页面内容不会被误伤回灌)。
   - `deferredWrite: true` —— 标记本 action 的效果**延迟到用户确认才生效**(提案类,如 `propose_note_edit` 只送达提案、用户点「应用」才写回):零工具收尾门禁的事实清单对此类调用注记「待用户确认后才生效,尚未写入」—— 模型提案后若收口「已修改完成」会被事实戳穿回灌,改口如实告知;等效写计数明确不含此类(调用成功 ≠ 已写入)。
+  - **裁决回传(4.27+ `sdk.resolveAction`,action-resolve-outcome)** —— deferredWrite 的另一半:用户确认/放弃后,宿主调 `sdk.resolveAction(name, 'applied' | 'discarded', detail?)` 把结局回传,**下一轮对话自动注入一次性「宿主动作裁决结果」段**(「动作 X 的结果已被用户采纳(已生效)/放弃(未生效)—— 已生效的可作事实引用;被放弃的不要当作已完成;不要重复提议已生效的内容」;`detail` 自由文本随行,如「3 条候选:采纳 2」)。名字键:同名字不同结局 = 新裁决覆盖旧笔(单挂起语义);相同结局重报 / 未标记 deferredWrite 的动作 / 未知名 → 返 `false`(幂等 + 严格门禁)。裁决在在途轮中途到达不打断该轮(段落下一轮);`switchSession`/`resetSession` 清空未送达的裁决;`action_resolved` 事件 + debugLogs `stage:'action_resolved'` 留痕。示例(草稿面板):保存按钮 → `resolveAction('update_profile','applied','保存前有手改')`,「放弃」→ `'discarded'`,直接关面板不报(沉默 ≠ 拒绝)。
 - `inspect().actions` 返回 `{ [name]: { description, hasParams, readsHostState, deferredWrite } }`
 
 #### schema 分层披露(`schemaHint`)

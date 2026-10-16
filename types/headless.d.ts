@@ -249,7 +249,8 @@ export type SdkEvent =
   | { type: 'focus_chip_click'; path: string; label?: string }
   | { type: 'focus_change'; focuses: Focus[] }
   | { type: 'proposal_pending'; id: string; summary: string; added: number; removed: number }
-  | { type: 'proposal_resolved'; id: string; outcome: 'applied' | 'discarded'; summary: string };
+  | { type: 'proposal_resolved'; id: string; outcome: 'applied' | 'discarded'; summary: string }
+  | { type: 'action_resolved'; name: string; outcome: 'applied' | 'discarded'; detail?: string };
 
 /** token 用量(OpenAI 协议字段名) */
 export interface TokenUsage {
@@ -1282,6 +1283,10 @@ export interface ChatSdk {
   revokeApprovalGrants(): void;
   /** content-proposals(4.22+):宿主裁决回传 → 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
   resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean;
+  /** deferredWrite 动作裁决回传(action-resolve-outcome):结局入队 → 下一轮一次性系统段 + action_resolved 事件 + debugLogs(action_resolved)。
+   *  名字键:同名字不同结局 = 新裁决覆盖旧笔;相同结局重报 / 未标记 deferredWrite / 未知名 → false(幂等)。
+   *  detail 自由文本随行(如「3 条候选:采纳 2」);裁决到达不打断在途轮;未送达的裁决随 switchSession/resetSession 清空 */
+  resolveAction(name: string, outcome: 'applied' | 'discarded', detail?: string): boolean;
   /** content-proposals:只读状态投射(未配置恒 null) */
   readonly proposals: { pending: Array<{ id: string; summary: string; createdAt: number; added: number; removed: number }>; applied: number; discarded: number; lastResolved: { id: string; outcome: 'applied' | 'discarded'; summary: string; detail?: string; at: number } | null } | null;
   /** 回退到最近一次正常 checkpoint(整体还原对话历史 + 主数据 + vfs + todos);需开启 checkpoint,无可用返回 false */

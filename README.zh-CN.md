@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3861%20asserts-brightgreen.svg)](#自测)
+[![tests](https://img.shields.io/badge/self%20tests-3879%20asserts-brightgreen.svg)](#自测)
 
 ---
 
@@ -250,7 +250,7 @@ ChatDialog, MessageContent, CodePreview, SkillPanel, DebugDrawer, useChat
 | **页面数据** | `data` | `{schema,bind,description?}` | 单主对象:声明 zod schema(校验 + 字段描述自动注入提示词)+ bind(reactive/普通对象,工具直接读写,不挂 window)+ description |
 | | `tools` / `skills` / `memory` | `Tool[]` / `SkillSpec[]` / `string` | 自定义工具 / 技能 / AGENTS.md 风格持久指令 |
 | **能力开关** | `capabilities` | `{planning?,missionAnchor?,dataOps?,fetch?,skills?,vfs?,summarization?,memory?,workingMemory?,subagent?,verify?,domInspect?,focus?}` | 核心默认开（`verify`/`domInspect` 默认关,opt-in;`focus` 上下文聚焦·指定组件精修,默认开）；`false` 关掉省 token |
-| | `actions` | `Record<string,{description,run,params?,readsHostState?,deferredWrite?}>` | **(2.18+) 宿主动作**：注册 save_draft/publish 等页面操作 → SDK 自动生成命名 tool 供 agent 触发；**(4.20+) 两语义标记**:`readsHostState`(action 读宿主态 → 旧结果随 `notifyHostChange` 置过期占位)/ `deferredWrite`(提案类,效果待用户确认 → 事实清单注记「待确认」防谎报完成) |
+| | `actions` | `Record<string,{description,run,params?,readsHostState?,deferredWrite?}>` | **(2.18+) 宿主动作**：注册 save_draft/publish 等页面操作 → SDK 自动生成命名 tool 供 agent 触发；**(4.20+) 两语义标记**:`readsHostState`(action 读宿主态 → 旧结果随 `notifyHostChange` 置过期占位)/ `deferredWrite`(提案类,效果待用户确认 → 事实清单注记「待确认」防谎报完成);**(4.27+) `sdk.resolveAction` 裁决回传**:确认/放弃后把结局回传,下一轮一次性「宿主动作裁决结果」段 + `action_resolved` 事件(名字键/幂等/严格罩 deferredWrite)|
 | | `hostWatch` | `boolean \| { url?, pushState?, title?, debounceMs?, ignore? }` | **(4.21+) 宿主导航自动报案**:`true` = 监听 hashchange/popstate,URL 变化自动触发 notifyHostChange;`pushState` patch / `title` 观察 opt-in;`debounceMs` 默认 300(连发合并);`ignore` 过滤自家纯锚点;服务端 no-op(`inspect().hostWatch` 确认) |
 | | `proposals` | `{ read, onProposal, toolName?, readToolName?, contentKind?, maxPending? }` | **(4.22+) 内容提案通道**:`read` 返回当前内容、`onProposal` 收完整提案(含 diff)渲染面板;工具名/内容说明/在审上限可调;不配置零注册 |
 | | `schemaHint` | `{maxKeys?,maxChars?}` · 默认 `{15,4000}` | **(2.18+) 大 schema 分层披露阈值**：超则 systemPrompt 只注入顶层概览（不带约束/不递归）,深层约束按需 `schema_data` 查;小 schema 无感（全量） |

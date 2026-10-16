@@ -81,6 +81,7 @@ import { domTools, makeDomInspectSkill, domInspectSkillName, makePageAnalysisSki
 import { inspectTools } from '../tools/envTool'
 import { createBudgetMiddleware } from '../harness/budget'
 import { actionsToTools, actionsToInspectInfo } from './actions'
+import { createActionOutcomeChannel } from './actionOutcome'
 import { selectBuiltinTools } from '../toolsets'
 import { createUsageHintsMiddleware } from '../harness/usageHints'
 import { invalidatePageReads } from '../harness/readInvalidation'
@@ -226,6 +227,8 @@ export interface AgentCore {
   notifyHostChange(opts?: { reason?: string }): void
   /** content-proposals:宿主裁决回传(用户点「应用/放弃」后调)→ 出队 + proposal_resolved 事件 + 下轮结局注入;false = id 未知/已裁决 */
   resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean
+  /** deferredWrite 动作裁决回传(action-resolve-outcome):结局入队 → 下轮一次性段 + action_resolved 事件;名字键/幂等/严格罩 deferredWrite 名集 */
+  resolveAction(name: string, outcome: 'applied' | 'discarded', detail?: string): boolean
   /** content-proposals:只读状态投射(未配置 proposals 恒 null) */
   getProposals(): { pending: Array<{ id: string; summary: string; createdAt: number; added: number; removed: number }>; applied: number; discarded: number; lastResolved: { id: string; outcome: 'applied' | 'discarded'; summary: string; detail?: string; at: number } | null } | null
   /** 运行时替换用户工具集(内置不动);立即 rebind + infoTick 刷新 */
@@ -841,6 +844,19 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     ...Object.entries(options.actions ?? {}).filter(([, def]) => def?.deferredWrite === true).map(([name]) => name),
     ...(proposalWriteName ? [proposalWriteName] : []),
   ])
+  // deferredWrite 动作结局回传(action-resolve-outcome,2026-10-16):通道恒建(零 deferred 动作的集成
+  // resolveAction 对一切名字返 false + warn,sdk 方法面稳定);中间件只在确有 deferred 动作时装配。
+  // 留痕/事件与 proposalChannel 同款闭包接线(stage 与 4.26.2 的 action_failed 同族)
+  const actionOutcomeChannel = createActionOutcomeChannel({
+    deferredNames: deferredWriteActionNames,
+    emit: (e) => { try { emit(e as unknown as import('../types').SdkEvent) } catch { /* 事件面异常不炸通道 */ } },
+    log: (name, outcome, detail) => {
+      core.agent?.debugLogs?.value?.push({
+        timestamp: Date.now(), type: 'middleware',
+        data: { stage: 'action_resolved', name, outcome, ...(detail ? { detail: detail.slice(0, 200) } : {}) },
+      })
+    },
+  })
   // mcpTools 可变:后台握手完成后收集,setTools 重建 extraTools 时纳入
   const mcpTools: StructuredToolInterface[] = []
   // MCP 后台连接释放标记:release 先行(握手完成前 unmount)→ 后台握手完成后直接关连接,
@@ -1241,6 +1257,18 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
         afterAgent: () => { proposalChannel.state.notices.length = 0 },
       }
     : null
+  // deferredWrite 动作结局段(action-resolve-outcome):与 proposalNotice 并立同构不统一 —— 名字键/无
+  // pending 概念(挂起态在宿主面板)。augmentPrompt 只读 + afterAgent 清空 = 一次性(S1 幂等契约);
+  // 裁决在在途轮中途到达 → 自然落下一轮,不中断在途流
+  const actionNoticeMw: Middleware | null = deferredWriteActionNames.size > 0
+    ? {
+        name: 'actionNotice',
+        augmentPrompt: () => (actionOutcomeChannel.notices.length
+          ? ['【宿主动作裁决结果】(以此为准;这些动作的效果以本段为准,不要凭调用时的回执猜测)', ...actionOutcomeChannel.notices].join('\n')
+          : undefined),
+        afterAgent: () => { actionOutcomeChannel.clear() },
+      }
+    : null
   // A4「可操作数据」段:每轮从 liveData() 动态重算(修 setData 不同步 Bug)
   // 插中间件栈最前(usageHints 之前),保证数据段紧跟 base —— LLM 看到的 system 结构与现状等价
   // 仅 finalDataConfig 存在时装载;无 data → buildDataPrompt 返 '' → augmentPrompt 返 undefined → 跳过
@@ -1377,6 +1405,7 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     ...(pageContextMw ? [pageContextMw] : []), // 页面锚点紧随提示段(mission 前;read_page 指引随段内条件化)
     hostNoticeMw, // S2 宿主变更:pin 段(页面锚点后)+ 流内页面读失效(notifyHostChange 触发)
     ...(proposalNoticeMw ? [proposalNoticeMw] : []), // content-proposals:裁决结局一次性注入段
+    ...(actionNoticeMw ? [actionNoticeMw] : []), // deferredWrite 动作裁决结局一次性注入段(action-resolve-outcome)
     // 按 capabilities 条件装载内置中间件(默认全开;verify 默认关)
     ...(useMission ? [missionMw] : []), // mission 在 todos 前(pin 段在 todos 段前;revive-mission-anchor)
     intentGuardMw, // mission 后:问句意图守卫 pin 段(逐消息定性「先答勿做」;instruction-adherence B,默认开)
@@ -1785,12 +1814,12 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
       return results
     },
 
-    /** 切换会话(F2b 委托 sessionLifecycle;签名经 AgentCore 注解约束)。一次性授权随会话失效:切换即清空 */
-    switchSession: (sessionId) => { approvalGrants.clear(); return sl.switchSession(sessionId) },
+    /** 切换会话(F2b 委托 sessionLifecycle;签名经 AgentCore 注解约束)。一次性授权/未送达的动作裁决随会话失效:切换即清空 */
+    switchSession: (sessionId) => { approvalGrants.clear(); actionOutcomeChannel.clear(); return sl.switchSession(sessionId) },
     exportSession: (sessionId) => sl.exportSession(sessionId),
     importSession: (data) => sl.importSession(data),
 
-    resetSession: () => { approvalGrants.clear(); sl.resetSession() },
+    resetSession: () => { approvalGrants.clear(); actionOutcomeChannel.clear(); sl.resetSession() },
 
     stream: async (msgs, onEvent, signal) => {
       if (!core.agent) throw new Error('page-agent-sdk: agent 尚未初始化完成,请先 await mount()')
@@ -2182,6 +2211,14 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
      *  返回 false = id 未知或已裁决(幂等);detail 如写回失败的说明会进结局段 */
     resolveProposal(id: string, outcome: 'applied' | 'discarded', detail?: string): boolean {
       const ok = proposalChannel ? proposalChannel.resolve(id, outcome, detail) : false
+      if (ok) core.infoTick.value++
+      return ok
+    },
+    /** deferredWrite 动作裁决回传(action-resolve-outcome):结局(applied/discarded + detail 自由文本)
+     *  → 下一轮一次性系统段 + action_resolved 事件 + debugLogs 留痕。名字键:同名字不同结局 = 新裁决
+     *  覆盖旧笔;相同结局重报/未标记 deferredWrite/未知名 → false(幂等)。裁决到达不打断在途轮 */
+    resolveAction(name: string, outcome: 'applied' | 'discarded', detail?: string): boolean {
+      const ok = actionOutcomeChannel.resolve(name, outcome, detail)
       if (ok) core.infoTick.value++
       return ok
     },
@@ -2727,6 +2764,7 @@ export function _createChatSdk(options: ChatSdkOptions, mounter?: DialogMounter)
     /** 撤销全部一次性授权(4.26):后续调用恢复逐次确认;授权随 switchSession/resetSession 自动失效 */
     revokeApprovalGrants: core.revokeApprovalGrants,
     resolveProposal: core.resolveProposal,
+    resolveAction: core.resolveAction,
     get proposals() { return core.getProposals() },
     messages: core.messages,
     /** 回退到最近一次正常 checkpoint(整体还原对话历史 + 主数据 + vfs + todos);无可用 checkpoint 返回 false */

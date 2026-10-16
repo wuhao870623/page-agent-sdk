@@ -1,6 +1,9 @@
 # 活跃 Changes 优先级索引
 
-> **当前活跃 change:1(2026-09-20 更新;answer-intent-lanes 随 4.24.0 发布归档 —— 活跃仅剩沉睡的 capability-pack-factories)**:
+> **当前活跃 change:2(2026-10-16 更新;action-resolve-outcome 新立)**:
+>
+> **[`2026-10-16-action-resolve-outcome`](./2026-10-16-action-resolve-outcome/)**(SDK,**P2 裁决闭环,✅ 8/9 任务完成(2026-10-16;残项 4.3 = 发布门禁,仅用户说「发布」时执行)**,来源 = 4.26.2 actions 硬化时的优化空间盘点 + learning 门户三处已知限制〔propose_annotations 采纳面板、画像/技能草稿保存,README 明记「模型不知道用户采纳了没」〕):**`sdk.resolveAction(name, 'applied'|'discarded', detail?)`** 镜像 `resolveProposal` —— 严格限定 `deferredWrite` 动作(复用装配面既有名字集)、名字键同名覆盖(单挂起语义)、幂等返 false;**`actionNotice` 中间件并立 proposalNotice 不泛化**(augmentPrompt 只读注段 + afterAgent 清空 = 一次性,4.18 S1 正确写法;段头与行为契约文案 SDK 定死,宿主只给 detail);`action_resolved` 事件 + debugLogs(与 4.26.2 `action_failed` 同族);switch/reset 清队列、mid-round 到达落下一轮不中断在途轮。定级 minor,`ChatSdkOptions` 零新配置项。不做:调用 id 键/inspect 反射/learning 接线(消费方另做)。
+>
 >
 > **[`2026-09-20-answer-intent-lanes`](./archive/2026-09-20-answer-intent-lanes/)**(SDK,**P1 作答质量,✅ 全 14 任务完成随 4.24.0 发布归档 2026-09-20**(develop c4abcf9/816e3c0,master 85353c5;真 LLM S5/S6 场景待有 key 环境首跑采集;来源 = 学习门户真机诊断 dump〔deepseek-flash,6 轮/160K prompt tokens〕:「根据你的经验给出总结」被压成全引文页内索引〔reasoning 自证:*"The system prompt says: only use page content"*〕、讨论类问题答成 RAG miss 报告〔「本页没有正面回答——查了 §4.2、§4.1 补充、§3.1–3.4、§8…」= 门户规则 5「说明查过哪里」的字面执行〕、通篇 § 脚手架;对照组:术语在页上时答得很好 → 缺的是**问题形态分流**不是讲解能力):**作答车道制** —— ①`systemPromptHelpers.answerLanes`/`answerLanesEn` 导出(A 页面事实/B 概念术语〔页上没有也必须解释,「本页未提及,以下是通用解释」〕/C 求观点经验〔先验与笔记口径分列,页面没写不构成不答的理由〕+ 出处密度收敛〔只有页面断言才标,miss 压一句〕)②SDK 默认「页面内容助手」prompt 同源升级(promptBuilder.ts:58 单行「答案须来自页面实料」同病,全部 domInspect 文档站宿主继承)③门户 SYSTEM_PROMPT 采纳(SDK 发布后 learning 仓库另行实施)。不动:车道判定归 LLM 不机制化(与意图守卫同哲学)/usageHints/page-analysis(分层正交)/页面断言门禁(只放开「不引用页面的作答」,不放开「无依据页面断言」)。定级 minor。)
 >
