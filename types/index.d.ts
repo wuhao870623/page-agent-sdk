@@ -1353,6 +1353,8 @@ export interface ActionDef {
   run: (args: Record<string, unknown>) => unknown | Promise<unknown>;
   /** 可选参数 schema(ZodObject);不传 = 无参 tool */
   params?: any;
+  /** params 的别名:与 defineTool 的 schema 同名同义(消除两入口命名分叉);两者同给时 params 优先 */
+  schema?: any;
   /** 标记本 action 读取宿主态(4.20+):旧工具结果随 `sdk.notifyHostChange()` 替换为过期占位(修前仅 read_page 等五个内置页面读工具享受,action 仅靠 reason 文案口头告知);页面断言门禁的「页面依据」计数也计入。不标记 = 现行为零变化 */
   readsHostState?: boolean;
   /** 标记本 action 的效果延迟到用户确认才生效(提案类,4.20+):调用成功 ≠ 已写入 → 零工具门禁事实清单对此类调用注记「待用户确认后才生效」,防模型收口「已修改完成」;等效写计数不含此类。不标记 = 现行为零变化 */

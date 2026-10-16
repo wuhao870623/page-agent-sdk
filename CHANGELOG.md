@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [4.26.2] - 2026-10-16
+
+### Fixed
+
+- **actions 宿主动作错误通道:回执结构化 + 留痕**(4.26.1 同族补齐,learning 集成复审驱动)—— `run` 抛错时回执此前是**裸中文串**(「动作 X 执行失败:msg」)且**零日志**:4.26.1 在 content-proposals 读通道上已实证该形态致模型对同一句原样重调 5 次,actions 面漏掉了同款纪律。现回执换 SDK 统一口径 `ERROR: {json}`(`code: 'ACTION_FAILED'`,动作名/原因透传,message 保留「执行失败」短语兼容宿主字符串匹配)+ hint 引导修正重试而非原样重发;异常隔离不变(仍回灌不崩 agent)。同时 `actionsToTools` 新增可选 `onError` 回调(`{name, message}`),`createChatSdk` 装配层接线打 debugLogs(stage `action_failed`,消息截 300 字与 `read_failed` 同口径)—— 修前集成方排障只能靠模型转述。e2e action-semantics(+5)。
+
+### Added
+
+- **`ActionDef.schema` 别名**:与 `defineTool` 的 `schema` 同名同义(消除「actions 用 `params`、defineTool 用 `schema`」的两入口命名分叉);两者同给时 `params` 优先;`inspect().actions.hasParams` 对别名同效。selftest sec-36(+5)。selftest 3856 → **3861** / e2e 1306 → **1311**(browser 188 未变)。
+
 ## [4.26.1] - 2026-10-15
 
 ### Fixed

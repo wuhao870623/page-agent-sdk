@@ -596,8 +596,10 @@ createChatSdk({
 
 要点:
 
-- `run(args)` 返回值序列化回灌 LLM(`undefined` → "动作完成";`string` 直传;对象 → JSON)。**异常隔离**:`run` 抛错 → 错误字符串回灌 LLM 自纠(agent 不崩)
+- `run(args)` 返回值序列化回灌 LLM(`undefined` → "动作完成";`string` 直传;对象 → JSON)。**异常隔离**:`run` 抛错 → `ERROR:` 前缀的结构化错误(`ACTION_FAILED`,含动作名/原因/修复提示)回灌 LLM 自纠(agent 不崩),同时留痕 debugLogs(stage `action_failed`,含名称与截断原因 —— 修前是裸中文串且失败零记录,真机实测模型对同一句裸串原样重调 5 次)
 - 动作名须合法标识符(`[a-zA-Z][a-zA-Z0-9_]*`,如 `save_draft`),非法名跳过 + warn
+- 参数 schema 键名 `params`,别名 `schema`(与 `defineTool` 的 `schema` 同名同义;两者同给时 `params` 优先)
+- **多个 action 条件注册时合进同一个 `actions` 键**:`...(condA ? { actions: {...} } : {})` 与 `...(condB ? { actions: {...} } : {})` 两个展开面会因对象字面量后键整覆盖前键而**互相顶掉**(只剩后者)。写成 `actions: { ...(condA ? { a: {...} } : {}), ...(condB ? { b: {...} } : {}) }`
 - **两个语义标记(4.20+,均可选;不标记 = 现行为零变化)**:
   - `readsHostState: true` —— 标记本 action 读取宿主态(如 `read_note_source` 读笔记源文):旧工具结果随 `sdk.notifyHostChange()` **替换为过期占位**(修前只有 read_page 等五个内置页面读工具享受,action 只靠 reason 文案口头告知,长对话仍可能被引用);页面断言门禁的「页面依据」计数也计入(调过它再断言页面内容不会被误伤回灌)。
   - `deferredWrite: true` —— 标记本 action 的效果**延迟到用户确认才生效**(提案类,如 `propose_note_edit` 只送达提案、用户点「应用」才写回):零工具收尾门禁的事实清单对此类调用注记「待用户确认后才生效,尚未写入」—— 模型提案后若收口「已修改完成」会被事实戳穿回灌,改口如实告知;等效写计数明确不含此类(调用成功 ≠ 已写入)。

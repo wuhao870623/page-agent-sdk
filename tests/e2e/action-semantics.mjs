@@ -130,5 +130,36 @@ export async function run() {
       `模型最终改口:如实告知提案待确认(未谎称已写入),实际:${msgs.pop()?.slice(0, 60)}`)
     sdk.unmount()
   }
+  console.log('[e2e:action-semantics] 错误通道:run 抛错 → ERROR: 结构化回灌 + debugLogs action_failed 留痕;schema 别名与 params 同效')
+  {
+    let seenArgs = null
+    const model = new StubChatModel([
+      { toolCalls: [{ name: 'failing_action', args: {} }] },
+      { toolCalls: [{ name: 'aliased_action', args: { note: 'hi' } }] },
+      { text: 'done' },
+    ])
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-action-error', storage: 'memory', llm: model,
+      capabilities: MIN_CAPS, autoTitle: false,
+      actions: {
+        failing_action: { description: '必失败', run: async () => { throw new Error('宿主状态不可用') } },
+        aliased_action: { description: 'schema 别名', schema: z.object({ note: z.string() }), run: async (args) => { seenArgs = args; return `ok:${args.note}` } },
+      },
+    })
+    await sdk.mount()
+    await sdk.send('触发两个动作')
+    const fail = toolContentsOf(model.lastMessages, 'failing_action')
+    assert(fail.length === 1 && fail[0].startsWith('ERROR:'),
+      `run 抛错 → ERROR: 前缀结构化回灌(修前裸中文串,真机实测致原样重调),实际:${fail[0]?.slice(0, 60)}`)
+    assert(fail[0].includes('ACTION_FAILED') && fail[0].includes('failing_action') && fail[0].includes('宿主状态不可用'),
+      '错误体含错误码/动作名/原因(message 保留「执行失败」短语,hint 引导修正重试)')
+    const aliased = toolContentsOf(model.lastMessages, 'aliased_action')
+    assert(aliased[0] === 'ok:hi' && seenArgs?.note === 'hi', `schema 别名与 params 同效(参数解析透传 run),实际:${aliased[0]}`)
+    const logs = (sdk.debugLogs?.value ?? sdk.debugLogs ?? []).filter((l) => l?.data?.stage === 'action_failed')
+    assert(logs.length === 1 && logs[0].data.name === 'failing_action' && String(logs[0].data.message).includes('宿主状态不可用'),
+      `debugLogs 留痕 stage action_failed(名称 + 原因;修前失败零记录),实际 ${logs.length} 条`)
+    assert(sdk.inspect().actions?.aliased_action?.hasParams === true, 'inspect().actions.hasParams 反射 schema 别名')
+    sdk.unmount()
+  }
   return ctx.pass > 0 || ctx.fail === 0 ? { pass: ctx.pass, fail: ctx.fail } : { pass: ctx.pass, fail: ctx.fail }
 }

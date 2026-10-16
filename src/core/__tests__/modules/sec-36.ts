@@ -1,6 +1,6 @@
 /**
  * sec-36:宿主动作 actions + DOM 读取纯函数 domToStructure + DOM 检视工具族(dom_search/dom_info)
- * - actionsToTools:每个 action 一个命名 tool / 非法名跳过 / invoke 调 run / 异常隔离 / undefined 默认文案
+ * - actionsToTools:每个 action 一个命名 tool / 非法名跳过 / invoke 调 run / 异常隔离(toolError 结构化 + onError 回调)/ undefined 默认文案 / schema 别名
  * - actionsToInspectInfo:元信息(description + hasParams)
  * - domToStructure:tag/attrs 默认白名单 + data-* / text / depth 截断 childCount / 严格白名单 / includeText=false / null
  * - searchDom:selector/text 双模 + limit 截断 + CSS 路径
@@ -39,10 +39,30 @@ export async function run(ctx: TestCtx): Promise<void> {
   const okResult = await invoke(okTool, {})
   assert(okResult === '成功结果', '✓ action tool invoke → 调 run 返回结果')
 
-  // ✓ action tool run 抛错 → 错误字符串回灌(异常隔离,不崩 agent)
+  // ✓ action tool run 抛错 → toolError 结构化回灌(2026-10-16,4.26.1 纪律补到 actions 面;修前裸中文串)
   const errTool = actionsToTools({ boom: { description: 'boom', run: () => { throw new Error('炸了') } } })[0]
   const errResult = await invoke(errTool, {})
-  assert(errResult.includes('执行失败') && errResult.includes('炸了'), '✓ action tool run 抛错 → 错误字符串回灌(异常隔离)')
+  assert(errResult.startsWith('ERROR:') && errResult.includes('ACTION_FAILED') && errResult.includes('boom') && errResult.includes('炸了'),
+    '✓ action tool run 抛错 → ERROR: 结构化回灌(码 + 动作名 + 原因;异常隔离不变)')
+  assert(errResult.includes('执行失败') && errResult.includes('hint'), '✓ action 错误 message 保留「执行失败」短语(语义兼容)+ hint 修复提示')
+
+  // ✓ actionsToTools onError → run 抛错回调 {name, message}(createChatSdk 接 debugLogs;纯函数层不持日志通道)
+  {
+    const seen: string[] = []
+    const probeTool = actionsToTools(
+      { probe: { description: 'p', run: () => { throw new Error('坏了') } } },
+      { onError: ({ name, message }) => seen.push(`${name}:${message}`) },
+    )[0]
+    await invoke(probeTool, {})
+    assert(seen.length === 1 && seen[0] === 'probe:坏了', '✓ actionsToTools onError → run 抛错回调 {name, message}')
+  }
+
+  // ✓ schema 别名(2026-10-16):与 defineTool.schema 同名同义;两者同给时 params 优先
+  const aliasTool = actionsToTools({ aliased: { description: 'a', schema: z.object({ note: z.string() }), run: (a) => `got:${(a as { note: string }).note}` } })[0]
+  const aliasResult = await invoke(aliasTool, { note: 'hi' })
+  assert(aliasResult === 'got:hi', '✓ action schema 别名 → 参数经解析透传 run(与 params 同效)')
+  const bothTool = actionsToTools({ both: { description: 'b', params: z.object({}), schema: z.object({ note: z.string() }), run: () => 'x' } })[0]
+  assert((await invoke(bothTool, {})) === 'x', '✓ params 与 schema 同给 → params 优先(空参形态,别名不生效)')
 
   // ✓ action tool run 返 undefined → 默认完成文案
   const voidTool = actionsToTools({ noop: { description: 'noop', run: () => undefined } })[0]
@@ -57,6 +77,8 @@ export async function run(ctx: TestCtx): Promise<void> {
   assert(info.save.hasParams === false, '✓ actionsToInspectInfo → 无 params → hasParams=false')
   assert(info.query.hasParams === true, '✓ actionsToInspectInfo → 有 params → hasParams=true')
   assert(info.save.description === '保存', '✓ actionsToInspectInfo → description 透传')
+  assert(actionsToInspectInfo({ alias_only: { description: '别名', run: () => '', schema: z.object({ x: z.number() }) } }).alias_only.hasParams === true,
+    '✓ actionsToInspectInfo → 只给 schema 别名 → hasParams=true(反射面同效)')
 
   // ===== domToStructure 纯函数(mock DOM 节点 duck-typing) =====
   const mockEl = (tag: string, attrs: Record<string, string> = {}, text = '', children: unknown[] = []): any => ({

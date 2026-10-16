@@ -13,6 +13,7 @@
 import { tool } from '@langchain/core/tools'
 import type { StructuredToolInterface } from '@langchain/core/tools'
 import { z, type ZodTypeAny } from 'zod'
+import { toolError } from '../tools/toolError'
 
 /** 宿主动作定义:集成方注册的页面操作 */
 export interface ActionDef {
@@ -22,6 +23,8 @@ export interface ActionDef {
   run: (args: Record<string, unknown>) => unknown | Promise<unknown>
   /** 可选参数 schema(ZodObject);不传 = 无参 tool */
   params?: ZodTypeAny
+  /** params 的别名(2026-10-16):与 defineTool 的 schema 同名同义,消除两入口命名分叉;两者同给时 params 优先 */
+  schema?: ZodTypeAny
   /** 标记本 action 读取宿主态(结果随宿主变更过期)→ 注册进 notifyHostChange 失效集(action-host-semantics)。
    *  适用:read_note_source 类「读宿主文件/状态」的 action —— 修前只有 read_page 等五个内置页面读工具享受
    *  占位失效,action 旧结果仅靠 reason 文案口头告知,长对话仍可能被引用;标记后旧 ToolMessage 同样被
@@ -39,11 +42,16 @@ export type ActionMap = Record<string, ActionDef>
 /** 动作名合法校验(tool 名须 [a-zA-Z][a-zA-Z0-9_]*) */
 const VALID_NAME = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
+/** actionsToTools 的可观测性接线:run 抛错时回调(createChatSdk 用来打 debugLogs;纯函数层不持日志通道) */
+export interface ActionsToToolsOptions {
+  onError?: (info: { name: string; message: string }) => void
+}
+
 /**
  * 把集成方注册的 actions 转成 StructuredToolInterface[](每个 action 一个 tool)。
  * 纯函数,可单测。非法名(不符合 tool 命名)跳过 + console.warn(不抛,容错)。
  */
-export function actionsToTools(actions: ActionMap): StructuredToolInterface[] {
+export function actionsToTools(actions: ActionMap, opts: ActionsToToolsOptions = {}): StructuredToolInterface[] {
   const tools: StructuredToolInterface[] = []
   for (const [name, def] of Object.entries(actions)) {
     if (!VALID_NAME.test(name)) {
@@ -59,13 +67,20 @@ export function actionsToTools(actions: ActionMap): StructuredToolInterface[] {
             return result === undefined ? `动作 ${name} 执行完成。` : typeof result === 'string' ? result : JSON.stringify(result)
           } catch (e) {
             const msg = (e as Error)?.message || String(e)
-            return `动作 ${name} 执行失败:${msg}`
+            opts.onError?.({ name, message: msg })
+            // toolError 结构化(2026-10-16,4.26.1 纪律补到 actions 面):修前裸中文串 —— 真机实测
+            // 模型对同一句裸串原样重调 5 次;ERROR: 前缀 + 错误码给自纠抓手。异常隔离不变(回灌不崩)
+            return toolError({
+              code: 'ACTION_FAILED',
+              message: `动作 ${name} 执行失败:${msg}`,
+              hint: '检查参数与宿主状态后修正重试;连续失败时换思路或如实告知用户,不要原样重发相同调用。',
+            })
           }
         },
         {
           name,
           description: desc,
-          schema: (def.params ?? z.object({})) as ZodTypeAny,
+          schema: (def.params ?? def.schema ?? z.object({})) as ZodTypeAny,
         },
       ),
     )
@@ -77,7 +92,7 @@ export function actionsToTools(actions: ActionMap): StructuredToolInterface[] {
 export function actionsToInspectInfo(actions: ActionMap): Record<string, { description: string; hasParams: boolean; readsHostState: boolean; deferredWrite: boolean }> {
   const out: Record<string, { description: string; hasParams: boolean; readsHostState: boolean; deferredWrite: boolean }> = {}
   for (const [name, def] of Object.entries(actions)) {
-    if (VALID_NAME.test(name)) out[name] = { description: def.description, hasParams: !!def.params, readsHostState: def.readsHostState === true, deferredWrite: def.deferredWrite === true }
+    if (VALID_NAME.test(name)) out[name] = { description: def.description, hasParams: !!(def.params || def.schema), readsHostState: def.readsHostState === true, deferredWrite: def.deferredWrite === true }
   }
   return out
 }

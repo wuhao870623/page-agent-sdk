@@ -814,8 +814,17 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     ...(proposalChannel?.tools ?? []),
   ]
   userTools.forEach((t) => toolSources.set(t.name, 'user'))
-  // 宿主动作(actions):集成方注册的页面操作 → 自动包成命名 tool;异常隔离(run 抛错回灌 LLM 不崩)
-  const actionTools: StructuredToolInterface[] = actionsToTools(options.actions ?? {})
+  // 宿主动作(actions):集成方注册的页面操作 → 自动包成命名 tool;异常隔离(run 抛错回灌 LLM 不崩,
+  // 回执 toolError 结构化 ACTION_FAILED)。onError 留痕 debugLogs(proposal/dom_edit 同款直接 push,
+  // 消息截 300 字与 read_failed 同口径 —— 修前失败零记录,集成方排障只能靠模型转述)
+  const actionTools: StructuredToolInterface[] = actionsToTools(options.actions ?? {}, {
+    onError: ({ name, message }) => {
+      core.agent?.debugLogs?.value?.push({
+        timestamp: Date.now(), type: 'middleware',
+        data: { stage: 'action_failed', name, message: message.slice(0, 300) },
+      })
+    },
+  })
   actionTools.forEach((t) => toolSources.set(t.name, 'action'))
   // action 语义标记收集(action-host-semantics):readsHostState → S2 宿主变更失效面(旧结果置占位,
   // 修前仅 reason 文案口头告知)+ 页面断言门禁依据计数;deferredWrite → 零工具门禁事实清单「待确认」口径。
