@@ -181,6 +181,10 @@ export type SdkEvent =
   | { type: 'proposal_pending'; id: string; summary: string; added: number; removed: number }
   | { type: 'proposal_resolved'; id: string; outcome: 'applied' | 'discarded'; summary: string }
   | { type: 'action_resolved'; name: string; outcome: 'applied' | 'discarded'; detail?: string }
+  /** 裁决收口外发只读事件(4.28):approval 工具确认与 request_human_confirmation 两通道统一;不带 resolve/hold(防双重收口)。
+   *  approved=false 统一覆盖拒绝/超时/abort,以 via 区分;granted 仅「允许并不再询问」入口授权时出现(与 grants.add 同源);
+   *  choice 为字符串形裁决截 60;授权直通(approval_auto_allowed)不产本事件 */
+  | { type: 'approval_resolved'; toolName: string; approved: boolean; granted?: boolean; choice?: string; via: 'user' | 'timeout' | 'abort' }
 
 /** token 用量(OpenAI 协议字段名) */
 export interface TokenUsage {
@@ -284,6 +288,8 @@ export interface AgentInfo {
   staleReadsInvalidated?: number
   /** S2 宿主变更失效会话累计(host-integration-contract;notifyHostChange 触发的页面读占位替换次数,与写驱动分列) */
   hostReadsInvalidated?: number
+  /** 注入遥测会话累计(content-trust-and-observability;外部内容通道回执命中 suspected_injection 次数;switch/reset 清零) */
+  injectionSuspicions?: number
   /** A9 收口门禁会话累计(stage → { retries 回灌, exhausted 耗尽放行 };page_assertion_gate 键存在性 = domInspect 装配反射) */
   gates?: Record<string, { retries: number; exhausted: number }>
   /** A9 最近一次 system 段构成(段名/字节/超预算 drop 标记;集成方 augmentSystem/pageContext 段被 drop 时可观察) */

@@ -14,6 +14,7 @@ import type { StructuredToolInterface } from '@langchain/core/tools'
 import type { SubagentConfig } from '../harness/subagent'
 import type { SkillSpec } from '../harness/skills'
 import { markWatchdogTools } from '../harness/toolWatchdog'
+import { CONTENT_TELEMETRY_MARK, reportSuspicion, scanInjectionHints, wrapUntrustedContent, type ContentTelemetryDeps, type InjectionHint } from '../tools/untrustedContent'
 
 // ===== 类型 =====
 
@@ -67,6 +68,14 @@ export interface CreateRagSubagentOptions {
   skills?: SkillSpec[]
   /** 额外工具(直接进子 agent 工具池) */
   extraTools?: StructuredToolInterface[]
+  /**
+   * 检索内容信任分级(content-trust-fencing,4.28):缺省 'trusted' 回执格式与现状逐字一致(零变化);
+   * 'untrusted'(公网爬取语料/多人投喂 wiki 等不可控源)→ search/load 回执逐 hit 套 fetch_document
+   * 同款 UNTRUSTED 围栏(来源行留围栏外供溯源)。源级属性:需要逐 hit 分级时拆两个子 agent 表达。
+   */
+  contentTrust?: 'trusted' | 'untrusted'
+  /** 注入遥测订阅(4.28):search/load 回执组装点扫描命中时回调(每模式每 hit 一次,不分信任级);SDK 装配层自动接计数留痕 */
+  onSuspicion?: (tool: string, hint: InjectionHint) => void
 }
 
 // ===== RAG systemPrompt(多源检索引导;按实际配置的知识源动态生成) =====
@@ -150,14 +159,27 @@ export const ragSearchSkill: SkillSpec = {
 
 // ===== 工具壳 =====
 
+/** 命中列表 → 回执文本(两工具壳共享):注入遥测在回执组装点扫描(RAG 内容留在子 agent 上下文,
+ *  主循环中间件看不到 —— 扫描只能落这里;不分信任级,受控源被投毒同样是信号,只留痕不阻断);
+ *  untrusted 时逐 hit 套 UNTRUSTED 围栏(单源 untrustedContent.ts),来源行留围栏外供溯源 */
+function renderRagHits(hits: RagHit[], toolName: string, contentTrust: 'trusted' | 'untrusted', telemetry: ContentTelemetryDeps): string {
+  return hits
+    .map((h, i) => {
+      reportSuspicion(telemetry, toolName, scanInjectionHints(h.content))
+      const body = contentTrust === 'untrusted' ? wrapUntrustedContent(h.content, '检索内容') : h.content
+      return `【${i + 1}】${h.source ? `来源:${h.source}\n` : ''}${body}`
+    })
+    .join('\n\n')
+}
+
 /** 把 retriever 包成 search_docs 工具;retriever 抛错 try/catch 降级为错误字符串回灌(换关键词重试,不崩) */
-function buildSearchTool(name: string, retriever: RagRetriever, defaultTopK: number): StructuredToolInterface {
+function buildSearchTool(name: string, retriever: RagRetriever, defaultTopK: number, contentTrust: 'trusted' | 'untrusted', telemetry: ContentTelemetryDeps): StructuredToolInterface {
   const t = tool(
     async ({ query, topK }) => {
       try {
         const hits = await retriever(query, { topK: topK ?? defaultTopK })
         if (!hits?.length) return `未检索到与「${query}」相关的内容。可换关键词或扩大 topK 重试。`
-        return hits.map((h, i) => `【${i + 1}】${h.source ? `来源:${h.source}\n` : ''}${h.content}`).join('\n\n')
+        return renderRagHits(hits, name, contentTrust, telemetry)
       } catch (e) {
         return `检索出错:${(e as Error).message}。可换关键词重试。`
       }
@@ -173,18 +195,20 @@ function buildSearchTool(name: string, retriever: RagRetriever, defaultTopK: num
   )
   // per-tool 看门狗(flow-robustness P0#1):retriever 是集成方实现(接向量库/远程 API),永不 settle 时兜底
   markWatchdogTools([t])
+  // 注入遥测订阅挂点(装配层 wireContentTelemetry 接计数留痕;订阅制,多实例安全)
+  ;(t as any)[CONTENT_TELEMETRY_MARK] = telemetry
   return t
 }
 
 /** 把 loader 包成 load_doc 工具;loader 抛错降级(换 source 重试) */
-function buildLoadTool(name: string, loader: RagLoader): StructuredToolInterface {
+function buildLoadTool(name: string, loader: RagLoader, contentTrust: 'trusted' | 'untrusted', telemetry: ContentTelemetryDeps): StructuredToolInterface {
   const t = tool(
     async ({ source }) => {
       try {
         const res = await loader(source)
         const hits = Array.isArray(res) ? res : [res]
         if (!hits.length) return `未加载到「${source}」。检查 source 是否正确。`
-        return hits.map((h, i) => `【${i + 1}】${h.source ? `来源:${h.source}\n` : ''}${h.content}`).join('\n\n')
+        return renderRagHits(hits, name, contentTrust, telemetry)
       } catch (e) {
         return `加载出错:${(e as Error).message}。`
       }
@@ -197,6 +221,7 @@ function buildLoadTool(name: string, loader: RagLoader): StructuredToolInterface
   )
   // per-tool 看门狗:loader 同为集成方实现,同 search 工具口径打标
   markWatchdogTools([t])
+  ;(t as any)[CONTENT_TELEMETRY_MARK] = telemetry
   return t
 }
 
@@ -210,14 +235,16 @@ export function createRagSubagent(options: CreateRagSubagentOptions): SubagentCo
   const {
     retriever, loader, useVfs = true, id = 'rag', description, topK = 5,
     searchToolName = 'search_docs', loadToolName = 'load_doc', maxToolRounds = 8,
-    summarization, skills, extraTools,
+    summarization, skills, extraTools, contentTrust = 'trusted', onSuspicion,
   } = options
   if (!retriever && !loader && useVfs === false) {
     throw new Error('[page-agent-sdk][createRagSubagent] 至少配一种知识源:retriever / loader / useVfs(true)')
   }
+  // 注入遥测订阅集:工厂 onSuspicion 先进订阅;SDK 装配层经工具对象标记再接计数留痕(订阅制,叠加不覆盖)
+  const telemetry: ContentTelemetryDeps = { subscribers: onSuspicion ? [onSuspicion] : [] }
   const tools: StructuredToolInterface[] = []
-  if (retriever) tools.push(buildSearchTool(searchToolName, retriever, topK))
-  if (loader) tools.push(buildLoadTool(loadToolName, loader))
+  if (retriever) tools.push(buildSearchTool(searchToolName, retriever, topK, contentTrust, telemetry))
+  if (loader) tools.push(buildLoadTool(loadToolName, loader, contentTrust, telemetry))
   if (extraTools) tools.push(...extraTools)
   const allowedTools = useVfs ? ['vfs_grep', 'vfs_read', 'vfs_json_read'] : undefined
   // prompt/skill 按实际知识源动态生成(提示词与工具面一致:没配的源不提,防 LLM 调不存在的工具烧轮次)

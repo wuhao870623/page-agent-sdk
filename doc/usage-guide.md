@@ -606,6 +606,8 @@ createChatSdk({
   - **裁决回传(4.27+ `sdk.resolveAction`,action-resolve-outcome)** —— deferredWrite 的另一半:用户确认/放弃后,宿主调 `sdk.resolveAction(name, 'applied' | 'discarded', detail?)` 把结局回传,**下一轮对话自动注入一次性「宿主动作裁决结果」段**(「动作 X 的结果已被用户采纳(已生效)/放弃(未生效)—— 已生效的可作事实引用;被放弃的不要当作已完成;不要重复提议已生效的内容」;`detail` 自由文本随行,如「3 条候选:采纳 2」)。名字键:同名字不同结局 = 新裁决覆盖旧笔(单挂起语义);相同结局重报 / 未标记 deferredWrite 的动作 / 未知名 → 返 `false`(幂等 + 严格门禁)。裁决在在途轮中途到达不打断该轮(段落下一轮);`switchSession`/`resetSession` 清空未送达的裁决;`action_resolved` 事件 + debugLogs `stage:'action_resolved'` 留痕。示例(草稿面板):保存按钮 → `resolveAction('update_profile','applied','保存前有手改')`,「放弃」→ `'discarded'`,直接关面板不报(沉默 ≠ 拒绝)。
 - `inspect().actions` 返回 `{ [name]: { description, hasParams, readsHostState, deferredWrite } }`
 
+完整示例:`examples/actions-demo`(偏好清单 textarea 真相源 + `deferredWrite` 草稿-确认面板:保存/放弃 → `resolveAction` + `action_resolved` 事件流水;另配一个常败的 sync 动作演示 `ACTION_FAILED` 结构化错误通道;browser e2e `tests/browser/actions-demo.spec.ts` 覆盖采纳/放弃/失败三链)。
+
 #### schema 分层披露(`schemaHint`)
 
 `data.schema` 字段的 `.describe()` 会自动注入 systemPrompt「可操作数据」段。**大 schema**(几十上百字段)全量注入会撑爆 systemPrompt。`schemaHint` 配置触发**分层披露**:超阈值时自动转「顶层概览」(key + type + 一句描述,不带约束、不递归 shape)+ 尾部提示「深层约束查 `schema_data`」—— 省 token 又不丢可发现性;小 schema(≤ 阈值)仍全量(无感)。
@@ -659,6 +661,8 @@ sdk.vfsWrite('docs/components/hero.md', 'Hero 组件用于首屏主视觉...')
 ```
 
 - **RAG**(检索型):`search_docs`(语义检索 retriever)/ `load_doc`(异步加载 loader)/ vfs 搜索 / `fetch_document`;只读;默认装 `rag-search` skill。`retriever`/`loader` 集成方注入(SDK 零数据源依赖,不绑向量库)。检索的大段文档**不污染主上下文**(只回结构化结论)
+- **检索内容信任分级 `contentTrust`**(4.28+):缺省 `'trusted'` 回执裸拼(「知识源受集成方自控」的既有隐式假设不变);语料不可控时(公网爬取、多人投喂 wiki)传 `contentTrust:'untrusted'` → search/load 回执**逐 hit** 套与 `fetch_document` 同款的 UNTRUSTED 围栏(警示行 + BEGIN/END 分隔,来源行留围栏外供溯源),两通道围栏文案单源一致。信任是**源级属性**(工厂选项);需要逐 hit 分级的场景拆两个 `createRagSubagent`(各挂一个 id)表达。
+- **注入尝试遥测(4.28+,默认开无开关,只留痕不阻断)**:外部内容通道(`fetch_document` 与 RAG search/load 回执,**含 trusted 源** —— 受控源被投毒同样是信号)在回执组装点做轻量正则扫描(≤10 中英模式,覆盖「忽略/无视此前指令」「伪装新身份/系统提示词泄露」「chat 模板泄漏标记」;精度优先宁漏勿误,正常业务文本零命中);命中 → debugLogs `stage:'suspected_injection'`(含 `tool`/`pattern`/`snippet`)留痕 + `inspect().injectionSuspicions` 会话累计(`switchSession`/`resetSession` 清零)。不改回执内容、不阻断执行、不外发事件 —— 给归因与源治理提供数据,裁决仍归围栏/权限面/LLM。RAG 工厂另可传 `onSuspicion?: (tool, hint) => void` 自订阅命中(每模式每 hit 一次)。DOM 读(`read_page`/`get_dom` 等)与数据槽读**不在扫描面**(量大误报高)。
 - **`fetch_document` 安全提示**:URL 由 LLM 控制,同源请求默认带 cookie(浏览器 fetch 默认 `credentials:'same-origin'`)—— 文档内容以「不可信围栏」包裹防注入,但抓取本身可达任意同源 GET。敏感接口(如 `/api/user`)请服务端配 CSRF/鉴权校验,或 `capabilities:{fetch:false}` 关闭该工具。
 - **HTML**(生成型,3.0 单模式 breaking):规划(`write_todos`/`update_todo`)+ **代码作为 data 资产**(`data.<writablePath>[i].code` 字段,随 data json 持久化进服务端 DB;UI 直接绑 `data.code` 响应式渲染)+ **vfs 作编辑工作副本** + 限定写(`writablePaths` path guard)。**框架自动 checkout/commit**(主 agent 透明):beforeAgent 把 `data.code` 按 `__pgId` 检出到 vfs(`html/<__pgId>.html`,覆盖式刷新)→ 子 agent 在 vfs 改 → afterAgent 增量回写改过的 vfs → `data.code`(直改 bind,不经 write,不进快照栈)。默认开 `summarization`(频繁改代码累积快)
   - **两条工作路径**:① 新建组件 → 子 agent `write({patch:{op:'set',jsonPath:'components.N',value:{name,code,props}}})`,code 直接进 data(框架补 `__pgId`,不经 vfs/checkout/commit);② 修改组件 → 框架 checkout → 子 `vfs_read`+`vfs_edit` 增量改工作副本 → 框架 commit 回写
@@ -1273,6 +1277,18 @@ createChatSdk({
 
 **一次性授权**(`approval.remember: true`,4.26+,默认 false):确认条多一枚「允许并不再询问(本会话)」次级按钮 —— 用户点它 = 允许本次并授予**会话级**免确认,该工具名进授权集,本会话内后续调用免确认直通(先于 `confirm` 回调判定,不再逐次盘点)。适用于批量写场景(标注连发、连续编辑)。安全面:拒绝/超时/abort 永不授权;预览 refuse 态下授权按钮与「允许」同禁;授权随 `switchSession`/`resetSession` 自动失效;`sdk.revokeApprovalGrants()` 随时撤销;`inspect().approvals = { remember, grantedTools }` 反射当前授权面。headless 子路径无内置确认条,该开关仅在宿主自建确认通道时有效(`approval_request` 载荷带 `remember:true`,`resolve({approved:true, remember:true})` 即授权)。默认关 = 逐次确认,现行为零变化。
 
+**裁决收口外发事件 `approval_resolved`**(4.28+):每次确认收口(被动确认 + 主动征询两通道统一)外发只读事件,供宿主 UI 联动、审计上报与埋点 —— 与 debugLogs 留痕同源同频,但**载荷不含 `resolve`/`hold`**(事件是事后观察不是操作句柄,防双重收口):
+
+| 字段 | 说明 |
+|---|---|
+| `toolName` | 收口的工具名(主动征询恒 `request_human_confirmation`) |
+| `approved` | `true` = 允许/选方案;`false` 统一覆盖用户拒绝、超时自动拒、abort 自动拒三种形态 |
+| `granted?` | 仅 `true`:用户经「允许并不再询问(本会话)」入口授权(与授权集写入同源);其余形态无此字段 |
+| `choice?` | 字符串形裁决(选项文本)截 60 字符;布尔形裁决无此字段 |
+| `via` | `'user'`(用户裁决)/ `'timeout'`(无响应自动拒)/ `'abort'`(停止生成联动) |
+
+授权直通(grants 命中免确认)**不产本事件**(那次调用没有确认收口;`approval_auto_allowed` 留痕照旧)。headless 无响应路径由 30s 自动拒收口,经 `via:'timeout'` 同样外发。
+
 **write 审批 diff 预览**(`approval.preview: true`,4.10+,默认 false):write 挂起审批时自动跑一次**只读预览**(dryRun 纯函数通道,不碰快照/乐观锁基线),确认条从「args 原文 JSON」升级为**结构化 old→new**(逐 patch / set 逐变更顶层键;op 徽标 + path + 删除线旧值→新值,摘要截 200 字符,>20 条折叠);**校验失败也可见**——预览跑完整校验链(schema/path/保护字段),`ok=false + error` 让用户批准前即知这次写会不会被拒。默认关的原因:预览跑一次校验链有成本,且 args JSON 已有兜底呈现;编辑器类宿主建议开。载荷形态 `approval_request` 事件 `preview?: ApprovalWritePreview` 字段(headless 自建 UI 同样可消费)。
 
 **自定义工具的审批预览**(`approval.previewWrite`,4.24.1):内置预览只覆盖 `write` —— 自定义工具的写目标常常由宿主态决定、不在 args 里(典型:门户「把用户当前选中的那段标成黄色重点」,标哪段来自选区),确认条只能显示 args,用户等于盲批。传 `previewWrite: (name, args) => ApprovalWritePreview | null` 即可:挂起前对需确认调用做只读预览,返回的 `items`(op/jsonPath/oldSummary→newSummary 均自由填写,如 `op: '标注'`、`jsonPath: '当前选区'`)会渲染在确认条上;返回 `null` 再落内置 write 预览(`preview: true` 时)。修前该选项被装配层静默覆盖丢弃(4.24.1 修复)。
@@ -1385,9 +1401,10 @@ createChatSdk({
 | `done` | 一轮回复完成(stream 模式) | `content` |
 | `usage` | 每轮 LLM 调用后(若 provider 返回 usage) | `round` / `usage`(本轮 prompt/completion/total_tokens) / `cumulative`(累计) |
 | `session_restored` | storage 恢复会话快照后(mount 自动恢复 / `switchSession` 切到已存会话) | `sessionId` / `rounds`(恢复的消息数) |
+| `approval_resolved` | 确认收口时(被动确认 + 主动征询两通道;4.28+) | `toolName` / `approved` / `granted?`(仅授权入口)/ `choice?`(字符串裁决截 60)/ `via`(`'user'`/`'timeout'`/`'abort'`;授权直通不产本事件) |
 | `error` | 模型调用/工具抛错 | `message` |
 
-> ⚠️ `approval_request` 不外发(UI 已处理,避免集成方误调 `resolve` 双重收口)。
+> ⚠️ `approval_request` 不外发(UI 已处理,避免集成方误调 `resolve` 双重收口);收口观察用 `approval_resolved`(只读载荷)。
 > ⚠️ `tool_call`/`tool_result`/`text`/`done` 等流式事件仅在 **stream 模式**触发(UI 默认走 stream;命令式 `sdk.send` 走 invoke 无流式事件,但 `data_change`/`message_update`/`error` 仍会发)。
 
 **示例**(宿主页面响应式刷新,替代 `setInterval` 轮询):

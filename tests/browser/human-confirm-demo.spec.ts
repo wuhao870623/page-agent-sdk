@@ -70,6 +70,19 @@ test.describe('human-confirm-demo: 两层确认', () => {
     // 断言:页面 DOM 已更新(theme code 文本)
     const themeCode = await page.textContent('.cfg code:has-text("night-purple")')
     expect(themeCode).toContain('night-purple')
+
+    // 4.28 approval_resolved 外发事件:两层确认各收口一次(RHC choice 形 + approval 允许形)
+    const resolved = await page.evaluate(() => (window as any).__approvalResolved ?? [])
+    expect(resolved).toHaveLength(2)
+    expect(resolved[0]).toMatchObject({
+      type: 'approval_resolved', toolName: 'request_human_confirmation', approved: true, via: 'user',
+    })
+    expect(resolved[0].choice).toContain('暗夜紫+紧凑+6px')
+    expect(resolved[0].granted).toBeUndefined()
+    expect(resolved[1]).toMatchObject({
+      type: 'approval_resolved', toolName: 'write', approved: true, via: 'user',
+    })
+    expect(resolved[1].choice).toBeUndefined()
   })
 
   test('主动征询 → 选方案 → 写前确认 → 拒绝 → write 不执行', async ({ page }) => {
@@ -105,6 +118,17 @@ test.describe('human-confirm-demo: 两层确认', () => {
     expect(config.theme).toBe('fresh-blue')
     expect(config.density).toBe('cozy')
     expect(config.radius).toBe(12)
+
+    // 4.28 approval_resolved 拒绝形态:RHC 选方案 + write 拒绝,均外发只读事件
+    const resolved = await page.evaluate(() => (window as any).__approvalResolved ?? [])
+    expect(resolved).toHaveLength(2)
+    expect(resolved[0]).toMatchObject({
+      type: 'approval_resolved', toolName: 'request_human_confirmation', approved: true, via: 'user',
+    })
+    expect(resolved[0].choice).toBe('方案A')
+    expect(resolved[1]).toMatchObject({
+      type: 'approval_resolved', toolName: 'write', approved: false, via: 'user',
+    })
   })
 
   test('gate-pending 死局修:确认条挂起期输入禁发 + 提示,两层门禁连续覆盖,解除后恢复', async ({ page }) => {

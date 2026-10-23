@@ -155,6 +155,121 @@ export async function run() {
     sdk.unmount()
   }
 
+  console.log('[e2e:events] ✓ approval_resolved 外发事件:授权/拒绝/直通不产事件 + approval_request 仍不外发(4.28)')
+  {
+    // 队列:① write 挂确认 → 授权形收口 {approved:true,remember:true} ② read 挂确认 → 用户拒绝
+    // ③ write 再调(已授权直通执行;队列尾默认纯文本收口)
+    const llm = stubModel(
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'x' } } }] },
+      { text: '(轮1完成)' },
+      { toolCalls: [{ name: 'read', args: { jsonPath: 'title' } }] },
+      { text: '(轮2完成)' },
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'z' } } }] },
+    )
+    const resolved = []
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-approval-resolved', storage: 'memory', llm, autoTitle: false,
+      data: { schema: z.object({ title: z.string() }), bind: { title: 'a' }, description: 'd' },
+      approval: { tools: ['write', 'read'], remember: true },
+      capabilities: { ...MIN_CAPS },
+    })
+    await sdk.mount()
+    const hookTypes = []
+    const off = sdk.hook((e) => { hookTypes.push(e.type); if (e.type === 'approval_resolved') resolved.push(e) })
+    // 轮1:write 挂起 → 经 stream 通道拿到 approval_request,以「允许并不再询问」收口
+    const s1 = sdk.stream([{ role: 'user', content: '改标题', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request') e.resolve({ approved: true, remember: true })
+    })
+    await s1
+    const a = resolved[resolved.length - 1]
+    assert(a && a.toolName === 'write' && a.approved === true && a.granted === true && a.via === 'user' && !('choice' in a), `✓ 授权入口 → {approved:true, granted:true, via:'user'}(实得 ${JSON.stringify(a)})`)
+    assert(JSON.stringify(sdk.inspect().approvals?.grantedTools) === JSON.stringify(['write']), '✓ granted 与授权集同源(inspect().approvals.grantedTools 同步出现 write)')
+    // 轮2:read 挂起 → 用户拒绝(布尔 false)
+    const s2 = sdk.stream([{ role: 'user', content: '读标题', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request' && e.toolName === 'read') e.resolve(false)
+    })
+    await s2
+    const d = resolved[resolved.length - 1]
+    assert(d && d.toolName === 'read' && d.approved === false && d.via === 'user' && !('granted' in d) && !('choice' in d), `✓ 用户拒绝 → {approved:false, via:'user'}(实得 ${JSON.stringify(d)})`)
+    // 轮3:已授权的 write 直通 → 不产新的 approval_resolved(approval_auto_allowed 留痕照旧)
+    const s3 = sdk.stream([{ role: 'user', content: '再改标题', timestamp: Date.now() }], (e) => { void e })
+    await s3
+    assert(resolved.length === 2, `✓ 授权直通不产 approval_resolved(计数恒 2,实得 ${resolved.length})`)
+    assert(sdk.debugLogs.value.some((l) => l.data?.stage === 'approval_auto_allowed' && l.data?.toolName === 'write'), '✓ 直通留痕 approval_auto_allowed')
+    // approval_request 全程不外发(hook 通道只见 approval_resolved)
+    assert(!hookTypes.includes('approval_request'), '✓ approval_request 维持不外发(仅收口事件外发)')
+    off()
+    sdk.unmount()
+  }
+
+  console.log('[e2e:events] ✓ approval_resolved 超时形态(4.28)')
+  {
+    const llm = stubModel(
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'x' } } }] },
+      { text: '(超时后收口)' },
+    )
+    const resolved = []
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-approval-timeout', storage: 'memory', llm, autoTitle: false,
+      data: { schema: z.object({ title: z.string() }), bind: { title: 'a' }, description: 'd' },
+      approval: { tools: ['write'], timeoutMs: 60 },
+      capabilities: { ...MIN_CAPS },
+    })
+    await sdk.mount()
+    const off = sdk.hook((e) => { if (e.type === 'approval_resolved') resolved.push(e) })
+    await sdk.stream([{ role: 'user', content: '改标题', timestamp: Date.now() }], () => {}) // 挂起无人应答(hold 不调)→ 60ms 自动拒
+    assert(resolved[0] && resolved[0].toolName === 'write' && resolved[0].approved === false && resolved[0].via === 'timeout', `✓ 超时自动拒 → via:'timeout'(实得 ${JSON.stringify(resolved[0])})`)
+    off()
+    sdk.unmount()
+  }
+
+  console.log('[e2e:events] ✓ approval_resolved abort 形态(4.28)')
+  {
+    const llm = stubModel(
+      { toolCalls: [{ name: 'write', args: { patch: { op: 'set', jsonPath: 'title', value: 'y' } } }] },
+      { text: '(abort 后收口)' },
+    )
+    const resolved = []
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-approval-abort', storage: 'memory', llm, autoTitle: false,
+      data: { schema: z.object({ title: z.string() }), bind: { title: 'a' }, description: 'd' },
+      approval: { tools: ['write'] },
+      capabilities: { ...MIN_CAPS },
+    })
+    await sdk.mount()
+    const off = sdk.hook((e) => { if (e.type === 'approval_resolved') resolved.push(e) })
+    const s = sdk.stream([{ role: 'user', content: '改', timestamp: Date.now() }], () => {}) // 挂起不 resolve
+    await new Promise((r) => setTimeout(r, 100))
+    await sdk.switchSession() // abortAllActive → signal 联动自动拒
+    await s.catch(() => {})
+    assert(resolved[0] && resolved[0].approved === false && resolved[0].via === 'abort', `✓ abort 联动 → via:'abort'(实得 ${JSON.stringify(resolved[0])})`)
+    off()
+    sdk.unmount()
+  }
+
+  console.log('[e2e:events] ✓ approval_resolved RHC choice 形态(4.28)')
+  {
+    const llm = stubModel(
+      { toolCalls: [{ name: 'request_human_confirmation', args: { question: '改标题用哪个方案?', options: ['方案A:仅改标题', '方案B:改标题并调整间距'], recommendation: '方案A:仅改标题' } }] },
+      { text: '(已按所选方案执行)' },
+    )
+    const resolved = []
+    const sdk = createChatSdk({
+      ui: false, id: 'e2e-approval-rhc', storage: 'memory', llm, autoTitle: false,
+      data: { schema: z.object({ title: z.string() }), bind: { title: 'a' }, description: 'd' },
+      capabilities: { ...MIN_CAPS },
+    })
+    await sdk.mount()
+    const off = sdk.hook((e) => { if (e.type === 'approval_resolved') resolved.push(e) })
+    await sdk.stream([{ role: 'user', content: '给我方案', timestamp: Date.now() }], (e) => {
+      if (e.type === 'approval_request' && e.toolName === 'request_human_confirmation') e.resolve('方案B:改标题并调整间距')
+    })
+    const c = resolved.find((r) => r.toolName === 'request_human_confirmation')
+    assert(c && c.approved === true && c.choice === '方案B:改标题并调整间距' && c.via === 'user' && !('granted' in c), `✓ RHC 点选方案 → choice 形外发(实得 ${JSON.stringify(c)})`)
+    off()
+    sdk.unmount()
+  }
+
   console.log('[e2e:events] eval_script → data_change(node 无 Worker:transform 失败不发〔P2#8 口径〕;成功落地映射由 browser page-demo 覆盖)')
   {
     // node 无 Worker 沙箱:transform 脚本实际不落地(dataOps 返回 ERROR: 无法创建 Worker 沙箱)→ P2#8 口径下

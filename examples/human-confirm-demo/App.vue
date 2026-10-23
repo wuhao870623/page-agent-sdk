@@ -47,6 +47,8 @@ const config = appConfigObj
 
 // tick:onEvent('data_change') 时 ++,:key 强制预览重渲染读最新 config
 const tick = ref(0)
+// DEV:浏览器 e2e 断言用(4.28 approval_resolved 外发事件;外置数组避免与 tick 响应式耦合)
+w.__approvalResolved = []
 
 const root = ref<HTMLElement>()
 let agent: ChatSdk | null = null
@@ -88,6 +90,7 @@ onMounted(() => {
     // 非 reactive bind:监听 data_change 触发 tick,:key 强制预览重渲染
     onEvent(e) {
       if ((e as any).type === 'data_change') tick.value++
+      if ((e as any).type === 'approval_resolved') (w.__approvalResolved as any[]).push(e)
     },
   })
   agent.mount()

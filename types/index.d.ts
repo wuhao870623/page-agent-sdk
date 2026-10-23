@@ -254,7 +254,15 @@ export type SdkEvent =
   | { type: 'focus_change'; focuses: Focus[] }
   | { type: 'proposal_pending'; id: string; summary: string; added: number; removed: number }
   | { type: 'proposal_resolved'; id: string; outcome: 'applied' | 'discarded'; summary: string }
-  | { type: 'action_resolved'; name: string; outcome: 'applied' | 'discarded'; detail?: string };
+  | { type: 'action_resolved'; name: string; outcome: 'applied' | 'discarded'; detail?: string }
+  /**
+   * 裁决收口外发只读事件(4.28):approval 工具确认与 request_human_confirmation 两通道统一,
+   * 载荷不含 resolve/hold(事件是事后观察不是操作句柄,防双重收口 —— 与 approval_request 不外发成对)。
+   * approved=false 统一覆盖用户拒绝/超时自动拒/abort 自动拒,以 via 区分;granted=true 仅在用户经
+   * 「允许并不再询问(本会话)」入口授权时出现(与 grants.add 同源);choice 为字符串形裁决
+   * (RHC 选项文本)截 60 字符;授权直通(grants 命中免确认)不产本事件。
+   */
+  | { type: 'approval_resolved'; toolName: string; approved: boolean; granted?: boolean; choice?: string; via: 'user' | 'timeout' | 'abort' };
 
 /** token 用量(OpenAI 协议字段名) */
 export interface TokenUsage {
@@ -765,6 +773,8 @@ export interface AgentInfo {
   approvals?: { remember: boolean; grantedTools: string[] };
   /** S2 宿主变更失效会话累计(host-integration-contract;notifyHostChange 触发的页面读占位替换次数,与写驱动分列) */
   hostReadsInvalidated?: number;
+  /** 注入遥测会话累计(4.28):外部内容通道(fetch_document/RAG search·load)回执命中 suspected_injection 次数;switch/reset 清零 */
+  injectionSuspicions?: number;
   /** hostWatch 装配反射(4.21+;配置存在才出现):enabled=false = 服务端/headless 特性探测全缺(合法 no-op);autoNotified = 自动报案会话累计 */
   hostWatch?: { enabled: boolean; url: boolean; pushState: boolean; title: boolean; autoNotified: number };
   /** content-proposals 反射(4.22+;配置存在才出现):pending 轻投影 + 会话累计 + 最近裁决 */
@@ -2622,6 +2632,8 @@ export interface RagHit { content: string; source?: string; score?: number }
 export interface RagRetrieveOptions { topK?: number }
 export type RagRetriever = (query: string, opts?: RagRetrieveOptions) => Promise<RagHit[]>;
 export type RagLoader = (source: string) => Promise<RagHit | RagHit[]>;
+/** 注入遥测命中(4.28):pattern = 静态模式名(宿主按名分发/聚合);snippet = 命中处上下文片段截 120 */
+export interface InjectionHint { pattern: string; snippet: string }
 export interface CreateRagSubagentOptions {
   retriever?: (query: string, opts?: RagRetrieveOptions) => Promise<RagHit[]>;
   loader?: (source: string) => Promise<RagHit | RagHit[]>;
@@ -2635,6 +2647,14 @@ export interface CreateRagSubagentOptions {
   summarization?: boolean | any;
   skills?: SkillSpec[];
   extraTools?: any[];
+  /**
+   * 检索内容信任分级(4.28):缺省 'trusted' 回执格式与现状逐字一致;'untrusted'(公网爬取语料/
+   * 多人投喂 wiki 等不可控源)→ search/load 回执逐 hit 套 fetch_document 同款 UNTRUSTED 围栏
+   * (来源行留围栏外供溯源)。源级属性:需要逐 hit 分级时拆两个子 agent 表达。
+   */
+  contentTrust?: 'trusted' | 'untrusted';
+  /** 注入遥测订阅(4.28):search/load 回执组装点扫描命中时回调(每模式每 hit 一次,不分信任级);SDK 装配层自动接计数留痕 */
+  onSuspicion?: (tool: string, hint: InjectionHint) => void;
   [k: string]: any;
 }
 export interface CreateHtmlSubagentOptions {

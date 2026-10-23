@@ -42,6 +42,8 @@ export type { SubagentOptions, SubagentLlmConfig, SubagentConfig, SubagentsContr
 // 能力包(专用子 agent 工厂):RAG 多源检索(createRagSubagent)+ HTML 代码组件生成(createHtmlSubagent)
 export { createRagSubagent } from './sdk/ragSubagent'
 export type { RagHit, RagRetrieveOptions, RagRetriever, RagLoader, CreateRagSubagentOptions } from './sdk/ragSubagent'
+// 注入遥测命中类型(createRagSubagent.onSuspicion 载荷;围栏/扫描函数为内部单源,不经此面导出)
+export type { InjectionHint } from './tools/untrustedContent'
 export { createHtmlSubagent, createHtmlFormatCheck, createCraftNoteCheck, htmlFragmentSkill, buildHtmlFragmentSkill } from './sdk/htmlSubagent'
 export type { CreateHtmlSubagentOptions, HtmlFormatCheckOptions } from './sdk/htmlSubagent'
 export { createHtmlRenderCheck, composeStructureThenRender, buildSandboxSrcdoc, buildCollectorJs, normalizeRenderResult, renderInSandbox, getSandboxLifecycle } from './sdk/htmlRenderCheck'

@@ -99,11 +99,21 @@ export function createHumanConfirmMiddleware(
         let settled = false
         const cleanup: Array<() => void> = []
 
-        const finish = (choice: boolean | string) => {
+        // via = 收口来源(与 approval 中间件同款):用户选方案/允许/拒绝默认 'user',abort/timeout 自动拒各传对应值
+        const finish = (choice: boolean | string, via: 'user' | 'timeout' | 'abort' = 'user') => {
           if (settled) return
           settled = true
           cleanup.forEach((fn) => fn())
           ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_resolved', toolName: ctx.name, choice: choice === false ? false : String(choice).slice(0, 60) } })
+          // 裁决收口外发只读事件(content-trust-and-observability,与 approval 中间件同型载荷):
+          // RHC 无 granted 概念(征询不参与一次性授权);choice 为字符串形裁决截 60(与留痕同口径)
+          ctx.emit?.({
+            type: 'approval_resolved',
+            toolName: ctx.name,
+            approved: choice !== false,
+            ...(typeof choice === 'string' ? { choice: choice.slice(0, 60) } : {}),
+            via,
+          } as any)
           // 3c 留痕回调:仅「options 方案被点选」记录(string choice 且本次征询带 options);
           // 允许(true)/拒绝(false)与非方案征询不记录(评审 2-5 口径:单组件删除确认不解除批量门禁武装)
           if (onResolved && typeof choice === 'string' && Array.isArray(ctx.args?.options) && ctx.args.options.length > 0) {
@@ -131,8 +141,8 @@ export function createHumanConfirmMiddleware(
 
         // abort 联动:进入时已 abort 或用户停止生成 → 视为拒绝(防永久挂起)
         if (ctx.signal) {
-          if (ctx.signal.aborted) return finish(false)
-          const onAbort = () => finish(false)
+          if (ctx.signal.aborted) return finish(false, 'abort')
+          const onAbort = () => finish(false, 'abort')
           ctx.signal.addEventListener('abort', onAbort, { once: true })
           cleanup.push(() => ctx.signal?.removeEventListener('abort', onAbort))
         }
@@ -145,7 +155,7 @@ export function createHumanConfirmMiddleware(
           const timer = setTimeout(() => {
             if (settled || held) return
             const waitedMs = Date.now() - startedAt
-            finish(false)
+            finish(false, 'timeout')
             opts.onAutoReject?.({ toolName: ctx.name, waitedMs })
           }, opts.timeoutMs)
           cleanup.push(() => clearTimeout(timer))

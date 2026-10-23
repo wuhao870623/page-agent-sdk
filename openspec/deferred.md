@@ -752,4 +752,4 @@ A3 曾写「116 个模块」,实测 sec-*.ts = **115**(runner import 同数)—�
 
 ## 2026-10-14(approval 一次性授权落地时的伴生残项)
 
-- **`approval_resolved` 外发事件**(宿主外部观察裁决结果):现状基础 = approval_pending/approval_resolved 双留痕已进 debugLogs(`approval.ts` logSink),`approval_request` 刻意不外发(防集成方误调 resolve 双重收口,events.ts 过滤);暂缓理由 = 首个消费方(learning 门户)的「一次性授权」走确认条内建入口,不需要外部观察裁决;外发 resolve 观察面要防与 hold()/resolve 的双重收口误用,需设计只读载荷形态;重启触发 = 集成方需要在自己的 UI/埋点里联动「用户点了允许/授权」(如宿主侧授权管理面板、审计上报),或第二个集成方提出同款需求。
+- ✅ **`approval_resolved` 外发事件**(宿主外部观察裁决结果):已随 openspec change `content-trust-and-observability`(4.28)收口 —— 载荷只读形态 `{toolName, approved, granted?, choice?, via:'user'|'timeout'|'abort'}`(不带 resolve/hold,防双重收口误用,正是本条当初暂缓的设计前提),approval 工具确认与 RHC 两通道统一覆盖;`approval_request` 维持不外发。触发条件「集成方需要在 UI/埋点里联动用户点了允许/授权」已由 learning 画像/技能面板与批注确认到达。

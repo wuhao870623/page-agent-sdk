@@ -2,7 +2,18 @@
 
 本变更日志基于 git commit 历史整理,遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 风格,版本号对应 npm 发布版本。
 
-## [Unreleased]
+## [4.28.0] - 2026-10-23
+
+### Added
+
+- **`examples/actions-demo`(宿主动作演示)+ browser e2e**:偏好清单 textarea 真相源 + `update_preferences`(`params` zod 校验 + `deferredWrite` 草稿-确认面板,保存/放弃 → `sdk.resolveAction` 裁决回传,`action_resolved` 事件流水)+ 常败 `sync_preferences_remote` 演示 `ACTION_FAILED` 结构化错误通道 —— 4.26.2 / 4.27.0 的 actions 面此前只有测试没有可跑 demo。`tests/browser/actions-demo.spec.ts` 三用例:采纳全链(下一轮请求 wire 含【宿主动作裁决结果】·采纳(已生效)段)/ 放弃分支(放弃(未生效)段)/ `run` 抛错(下一轮 wire 含 `ACTION_FAILED` 结构化回执,宿主零写入)。browser 188 → **191**(selftest 3879 / e2e 1320 未变)。
+- **`approval_resolved` 外发事件**(openspec change `content-trust-and-observability`):裁决收口(approval 工具确认与 `request_human_confirmation` 两通道统一)外发只读事件 `{toolName, approved, granted?, choice?, via:'user'|'timeout'|'abort'}` —— 载荷不带 resolve/hold(事件是事后观察不是操作句柄,防双重收口,与 `approval_request` 维持不外发成对);`approved=false` 统一覆盖用户拒绝/超时自动拒/abort 自动拒并以 `via` 区分;`granted=true` 仅「允许并不再询问(本会话)」入口授权时出现(与 grants.add 同源,授权直通不产本事件);`choice` 为字符串形裁决截 60(与 debugLogs 留痕同口径)。deferred 2026-10-14 段收口(learning 画像/技能面板与批注确认的审计联动触发)。
+- **RAG 检索信任分级围栏 `createRagSubagent({ contentTrust })`**:`'untrusted'`(公网爬取语料/多人投喂 wiki 等不可控源)→ search/load 回执逐 hit 套 fetch_document 同款 UNTRUSTED 围栏(来源行留围栏外供溯源);缺省 `'trusted'` 回执与现状逐字一致零变化。围栏实现抽共享纯函数(`untrustedContent.ts`,fetch_document 输出逐字节不变,selftest 锁定);新增 `onSuspicion` 工厂选项供宿主订阅注入命中。
+- **注入尝试遥测(默认开无开关,只留痕不阻断)**:外部内容通道(fetch_document + RAG search/load 回执,含 trusted 源 —— 受控源被投毒同样是信号)轻量正则扫描(≤10 中英模式,精度优先宁漏勿误,反例基线锁定「正常业务文本零命中」);命中 → debugLogs `stage:'suspected_injection'`(含 tool/pattern/snippet)+ `inspect().injectionSuspicions` 会话累计(switch/reset 清零);不改回执、不阻断、不外发事件;DOM 读/数据槽读不在扫描面。selftest 新增 sec-140(+48)/ e2e events(+9)· capability-packs(+5)· inspect(+5);selftest 3879 → **3927** / e2e 1320 → **1339**(browser 仅既有用例内补断言,计数未变)。
+
+### Fixed
+
+- **`actionNotice` 补进 `PIN_SEGMENT_NAMES`**(4.27 引入的不对称):动作裁决段与提案裁决段同族同重要性(都是「以此为准」的结局覆盖),系统段超 25% 预算裁剪时不再出现「提案段幸免、动作段被 drop」。同时 proposalNotice/actionNotice 两处内联中间件收敛为共享工厂 `createOutcomeNoticeMiddleware`(骨架收敛,段文案/装载位次零变化)。
 
 ## [4.27.0] - 2026-10-16
 

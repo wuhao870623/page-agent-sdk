@@ -8,6 +8,7 @@
  * - abort 联动:用户停止生成(signal.aborted)→ 自动拒绝,不永久挂起
  * - 超时(timeoutMs)→ 自动拒绝(默认 0 = 不超时,等用户)
  * - 拒绝时返回结构化 error,LLM 可据此改方案(如换路径、改只读)
+ * - 裁决收口外发只读事件 approval_resolved(载荷含 via 三态 user/timeout/abort;grants 直通不产事件)
  *
  * 装载顺序:在 permissions 之后(白名单先自动拒,幸存的写操作再人工确认)。
  */
@@ -89,7 +90,9 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
         let settled = false
         const cleanup: Array<() => void> = []
 
-        const finish = (approved: boolean | string | ApprovalGrantResolve) => {
+        // via = 收口来源(content-trust-and-observability):用户裁决默认 'user';abort 联动 / 超时 timer
+        // 各自传 'abort' / 'timeout' —— 外发事件据此区分三种 approved=false 形态
+        const finish = (approved: boolean | string | ApprovalGrantResolve, via: 'user' | 'timeout' | 'abort' = 'user') => {
           if (settled) return
           settled = true
           cleanup.forEach((fn) => fn())
@@ -100,6 +103,17 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
           const granted = Boolean(grantResolve?.remember) && ok
           if (granted) opts.grants?.add(ctx.name)
           ctx.logSink?.({ timestamp: Date.now(), type: 'middleware', data: { stage: 'approval_resolved', toolName: ctx.name, approved: !ok ? false : granted ? 'granted' : String(approved).slice(0, 60) } })
+          // 裁决收口外发只读事件(content-trust-and-observability):与 debugLogs 留痕同源同频(finish 单点);
+          // 载荷不带 resolve/hold —— 事件是事后观察不是操作句柄(与 approval_request 不外发成对)。
+          // granted 与 grants.add 同源;choice 为字符串形裁决截 60(与留痕同口径);grants 直通分支不 emit
+          ctx.emit?.({
+            type: 'approval_resolved',
+            toolName: ctx.name,
+            approved: ok,
+            ...(granted ? { granted: true } : {}),
+            ...(typeof approved === 'string' ? { choice: approved.slice(0, 60) } : {}),
+            via,
+          } as any)
           if (!ok) {
             // 兼容 vfs path / 数据 jsonPath / write 的 patch.jsonPath / patches[],让 LLM 知道被拒的精确范围
             const a = (ctx.args ?? {}) as Record<string, any>
@@ -121,8 +135,8 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
 
         // abort 联动:进入时已 abort → 立即拒绝;否则监听 abort(用户停止生成 → 自动拒绝,防永久挂起)
         if (ctx.signal) {
-          if (ctx.signal.aborted) return finish(false)
-          const onAbort = () => finish(false)
+          if (ctx.signal.aborted) return finish(false, 'abort')
+          const onAbort = () => finish(false, 'abort')
           ctx.signal.addEventListener('abort', onAbort, { once: true })
           cleanup.push(() => ctx.signal?.removeEventListener('abort', onAbort))
         }
@@ -136,7 +150,7 @@ export function createApprovalMiddleware(opts: ApprovalOptions = {}): Middleware
           const timer = setTimeout(() => {
             if (settled || held) return
             const waitedMs = Date.now() - startedAt
-            finish(false)
+            finish(false, 'timeout')
             opts.onAutoReject?.({ toolName: ctx.name, waitedMs })
           }, opts.timeoutMs)
           cleanup.push(() => clearTimeout(timer))

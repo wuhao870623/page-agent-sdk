@@ -373,6 +373,11 @@ export function extractWriteTargetPath(args: unknown): string {
   return ''
 }
 
+/** 跨压缩锚定段:系统段超预算时永不 drop(目标/工作记忆丢了 agent 跑偏;裁决结局段 proposalNotice/
+ *  actionNotice 同族保活 —— 「以此为准」的裁决覆盖被裁掉即失效,两者不得区别对待〔4.28 修 actionNotice 缺席的不对称〕)。
+ *  模块级导出供测试断言(不经 src/core/index.ts,非公共面) */
+export const PIN_SEGMENT_NAMES = new Set(['mission', 'workingMemory', 'intentGuard', 'resumeNotice', 'pageContext', 'hostNotice', 'proposalNotice', 'actionNotice'])
+
 export function createAgent(options: CreateAgentOptions) {
   const {
     apiKey,
@@ -537,8 +542,6 @@ export function createAgent(options: CreateAgentOptions) {
 
   /** 系统段 token 预算占比(harden-context-resilience Phase 5):system 段最多占窗口 25%,余 75% 留对话+工具结果+输出 */
   const SYSTEM_BUDGET_RATIO = 0.25
-  /** 跨压缩锚定段:系统段超预算时永不 drop(目标/工作记忆丢了 agent 跑偏) */
-  const PIN_SEGMENT_NAMES = new Set(['mission', 'workingMemory', 'intentGuard', 'resumeNotice', 'pageContext', 'hostNotice', 'proposalNotice'])
 
   /** 组装 system prompt:base + 各中间件 augmentPrompt 段。
    *  超系统段预算时按「非 pin 段从大到小 drop」收敛(丢最大段优先 = 丢最少段数;dataHint 巨型 schema 常最大先丢),
@@ -570,7 +573,7 @@ export function createAgent(options: CreateAgentOptions) {
         total -= d.tokens
         d.text = ''
       }
-      if (dropped.length) console.warn(`[page-agent-sdk] 系统段超预算(${before} > ${budget} tokens,窗口 ${caps.contextWindow} 的 ${SYSTEM_BUDGET_RATIO * 100}%),drop 非核心段:${dropped.join(', ')}(保 base/mission/workingMemory)`)
+      if (dropped.length) console.warn(`[page-agent-sdk] 系统段超预算(${before} > ${budget} tokens,窗口 ${caps.contextWindow} 的 ${SYSTEM_BUDGET_RATIO * 100}%),drop 非核心段:${dropped.join(', ')}(保 base + pin 段)`)
     }
     // A9 观测面:段构成快照(含 dropped 标记)—— 集成方的 augmentSystem/pageContext 段被 drop 时零可观察的盲区
     lastSystemSegments = segs.map((s) => ({ name: s.name, tokens: s.tokens, dropped: droppedNames.has(s.name) }))

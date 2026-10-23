@@ -62,6 +62,8 @@ import { createConflictManager } from './conflictManager'
 import { resolveStorage, resolveDialogConfig } from './optionsResolver'
 import { resolveCapabilities } from '../capabilities'
 import { createSdkEvents } from './events'
+import { createOutcomeNoticeMiddleware } from './outcomeNotice'
+import { wireContentTelemetry, type InjectionHint } from '../tools/untrustedContent'
 import { resolveContextOptions, PRESET_PRESERVE } from './contextPreset'
 import { composeMiddlewareStack } from './middlewareStack'
 import { createSessionVars, createSessionLifecycle } from './sessionLifecycle'
@@ -1247,27 +1249,27 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     afterAgent: () => { hostChangeState.notices.length = 0 },
   }
   // content-proposals 裁决闭环:用户 applied/discarded 后下一轮注入一次性结局段(hostNotice 同款模式 ——
-  // pin 段跨压缩 + afterAgent 清除;状态推进在 resolveProposal(轮外),严守 S1 幂等契约)
+  // pin 段跨压缩 + afterAgent 清除;状态推进在 resolveProposal(轮外),严守 S1 幂等契约)。
+  // 中间件经 createOutcomeNoticeMiddleware 工厂收敛(content-trust-and-observability):注入+一次性
+  // 消费骨架共享,renderLine/队列/事件语义留 proposalChannel 不动
   const proposalNoticeMw: Middleware | null = proposalChannel
-    ? {
+    ? createOutcomeNoticeMiddleware({
         name: 'proposalNotice',
-        augmentPrompt: () => (proposalChannel.state.notices.length
-          ? ['【内容提案裁决结果】(以此为准,不要凭提案前状态作答)', ...proposalChannel.state.notices].join('\n')
-          : undefined),
-        afterAgent: () => { proposalChannel.state.notices.length = 0 },
-      }
+        header: '【内容提案裁决结果】(以此为准,不要凭提案前状态作答)',
+        getNotices: () => proposalChannel.state.notices,
+        clear: () => { proposalChannel.state.notices.length = 0 },
+      })
     : null
-  // deferredWrite 动作结局段(action-resolve-outcome):与 proposalNotice 并立同构不统一 —— 名字键/无
-  // pending 概念(挂起态在宿主面板)。augmentPrompt 只读 + afterAgent 清空 = 一次性(S1 幂等契约);
-  // 裁决在在途轮中途到达 → 自然落下一轮,不中断在途流
+  // deferredWrite 动作结局段(action-resolve-outcome):名字键/无 pending 概念(挂起态在宿主面板);
+  // 与 proposalNotice 委托同一工厂(并立同构已收敛)。augmentPrompt 只读 + afterAgent 清空 = 一次性
+  // (S1 幂等契约);裁决在在途轮中途到达 → 自然落下一轮,不中断在途流
   const actionNoticeMw: Middleware | null = deferredWriteActionNames.size > 0
-    ? {
+    ? createOutcomeNoticeMiddleware({
         name: 'actionNotice',
-        augmentPrompt: () => (actionOutcomeChannel.notices.length
-          ? ['【宿主动作裁决结果】(以此为准;这些动作的效果以本段为准,不要凭调用时的回执猜测)', ...actionOutcomeChannel.notices].join('\n')
-          : undefined),
-        afterAgent: () => { actionOutcomeChannel.clear() },
-      }
+        header: '【宿主动作裁决结果】(以此为准;这些动作的效果以本段为准,不要凭调用时的回执猜测)',
+        getNotices: () => actionOutcomeChannel.notices,
+        clear: () => { actionOutcomeChannel.clear() },
+      })
     : null
   // A4「可操作数据」段:每轮从 liveData() 动态重算(修 setData 不同步 Bug)
   // 插中间件栈最前(usageHints 之前),保证数据段紧跟 base —— LLM 看到的 system 结构与现状等价
@@ -1295,6 +1297,22 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
   // SDK 事件系统(sdk.hook 注册监听器;emit 外发事件给 options.onEvent + 各 listener,approval_request 不外发,各自 try/catch 隔离)
   const events = createSdkEvents(options.onEvent)
   const emit = events.emit
+
+  // 注入遥测(content-trust-and-observability,默认开无开关):外部内容通道回执组装点
+  // (fetch_document / RAG search·load 工具壳,经 CONTENT_TELEMETRY_MARK 标记发现)命中上报 →
+  // debugLogs 留痕 + 会话计数。订阅制挂工具对象(fetch 单例多 sdk 实例共存时各自计数互不吞并);
+  // 只留痕不阻断、不改回执 —— DOM 读/数据槽读不在扫描面(spec 锁边界)
+  let injectionSuspicions = 0
+  const onInjectionSuspicion = (tool: string, hint: InjectionHint) => {
+    injectionSuspicions += 1
+    core.agent?.debugLogs?.value?.push({
+      timestamp: Date.now(), type: 'middleware',
+      data: { stage: 'suspected_injection', tool, pattern: hint.pattern, snippet: hint.snippet },
+    })
+  }
+  wireContentTelemetry(fetchDocTools, onInjectionSuspicion)
+  // 初始声明的 rag 子 agent 工具壳接线(动态 setSubagents/addSubagent 路径在各自方法内同款接线)
+  for (const s of effectiveSubagents ?? []) wireContentTelemetry(s.tools, onInjectionSuspicion)
 
   let skillsMw: ReturnType<typeof createSkillsMiddleware> | undefined
   // 用户在 ChatDialog 创建的 skill(独立持久化;与集成方 initialSkills 合并后给 controller,同名 userSkills 覆盖)
@@ -1815,11 +1833,11 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
     },
 
     /** 切换会话(F2b 委托 sessionLifecycle;签名经 AgentCore 注解约束)。一次性授权/未送达的动作裁决随会话失效:切换即清空 */
-    switchSession: (sessionId) => { approvalGrants.clear(); actionOutcomeChannel.clear(); return sl.switchSession(sessionId) },
+    switchSession: (sessionId) => { approvalGrants.clear(); actionOutcomeChannel.clear(); injectionSuspicions = 0; return sl.switchSession(sessionId) },
     exportSession: (sessionId) => sl.exportSession(sessionId),
     importSession: (data) => sl.importSession(data),
 
-    resetSession: () => { approvalGrants.clear(); actionOutcomeChannel.clear(); sl.resetSession() },
+    resetSession: () => { approvalGrants.clear(); actionOutcomeChannel.clear(); injectionSuspicions = 0; sl.resetSession() },
 
     stream: async (msgs, onEvent, signal) => {
       if (!core.agent) throw new Error('page-agent-sdk: agent 尚未初始化完成,请先 await mount()')
@@ -1963,6 +1981,8 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
         if (options.debug) console.warn('[page-agent-sdk][setSubagents] 未配 subagents:[] 或 capabilities.subagent 关闭,忽略')
         return
       }
+      // 注入遥测接线(同初始装配):新进 rag 工具壳接计数留痕(幂等,已接过的 no-op)
+      for (const s of configs) wireContentTelemetry(s.tools, onInjectionSuspicion)
       subagentsController.set(configs)
       core.infoTick.value++
     },
@@ -1972,6 +1992,7 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
         if (options.debug) console.warn('[page-agent-sdk][addSubagent] 未配 subagents:[] 或 capabilities.subagent 关闭,忽略')
         return
       }
+      wireContentTelemetry(config.tools, onInjectionSuspicion)  // 注入遥测接线(同 setSubagents)
       subagentsController.add(config)
       core.infoTick.value++
     },
@@ -2017,6 +2038,8 @@ function buildCore(options: ChatSdkOptions, agentId: string, hostWatchState?: { 
         staleReadsInvalidated: core.agent?.getStaleReadsInvalidated?.() ?? 0,
         // S2 宿主变更失效会话累计(notifyHostChange 触发的页面读占位替换;与 staleReadsInvalidated 分列 —— 触发源不同)
         hostReadsInvalidated: hostChangeState.readsInvalidated,
+        // 注入遥测会话累计(content-trust-and-observability):外部内容通道回执组装点命中 suspected_injection 次数;switch/reset 清零
+        injectionSuspicions,
         // content-proposals 反射(配置存在才出现):pending 轻投影 + 会话累计 + 最近裁决
         ...(proposalChannel ? { proposals: proposalChannel.snapshot() } : {}),
         // auto-host-watch 反射:配置存在才出现(_createChatSdk 传入 state 载体);enabled=false = 服务端/headless 特性探测全缺(合法 no-op)
