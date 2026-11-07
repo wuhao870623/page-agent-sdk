@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
 [![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
-[![tests](https://img.shields.io/badge/self%20tests-3927%20asserts-brightgreen.svg)](#自测)
+[![tests](https://img.shields.io/badge/self%20tests-3946%20asserts-brightgreen.svg)](#自测)
 
 ---
 
@@ -181,6 +181,7 @@ CDN 零配置：`<script src="https://unpkg.com/page-agent-sdk"></script>` → `
 | 📡 宿主导航自动报案(4.21) | `hostWatch: true`:URL 一变(hashchange/popstate)自动触发 notifyHostChange 全链路 —— 把「防线靠宿主记得调」变「防线自动」;pushState patch/title 观察 opt-in;去抖合并 + `ignore` 钩子;服务端/headless 特性探测静默 no-op(`inspect().hostWatch` 反射)。另:dom_edit/dom_restore 落地后旧页面读自动失效(默认开) | `hostWatch` |
 | 📝 内容提案-评审-应用(4.22) | `proposals: { read, onProposal }`:数据槽外内容的受控修改 —— `read_content`(基底+hash)→ `propose_content`(**增量 ops**:字面锚唯一命中/原子,token 只花在改动上;baseHash 漂移显式拒)→ 宿主 diff 面板 → 用户点应用才写回;`sdk.resolveProposal` 裁决闭环(事件 + 下轮结局告知);模型零写权限、未配置零注册;`lineDiff/applyProposalOps/hashContent` 纯函数导出;**(4.26.1+)读通道故障回结构化 `ERROR: {code:'CONTENT_READ_FAILED'}` + 勿重试提示 + `read_failed` 留痕**(`read` 返回 `null` 仍是正常空态,不算故障) | `proposals` + `sdk.resolveProposal` |
 | ✏️ 编辑消息重跑(4.25) | hover 任意已发送 user 消息点「编辑」→ 气泡内改文(Enter 保存/Esc 取消,IME 合成期不误发)→ 截断其后历史从该点重跑;焦点/图片/引用附带字段保留;生成中点编辑先自动停止;`roundSeq` 代次守卫使旧轮异步收口失效(不拆新轮状态);自建 UI 可编程式用 `useChat.editAndResend(index, newContent)` | 内置 UI 自动;自建 UI 走 `useChat` |
+| 🔄 刷新重生成(4.29) | 输入区常驻刷新按钮:空闲时直接重新生成最后一条回复(无需编辑消息);尾消息是 user 的未答态(停止/失败后没答上)直接补答、不删提问;错误条重试保留焦点/图片/**划词引用**附带字段(修「重试丢选中内容引用标签」);hover 消息的「重新生成」仍并存 | 内置 UI 自动 |
 | 🛡 页面断言门禁(4.18) | 「本页写了/原文提到…」× 本轮零页面依据(含截图)× 非诚实不存在声明 → 回灌「先读页面再断言 + 事实清单」(独立预算 ≤2,超限 EXHAUSTED observable);仅 domInspect 开启装配(数据槽误伤路径结构切断) | 随 `domInspect` 自动 |
 | 📍 引用 DOM 锚点(4.18) | 划词捕获一并记录选区位置(块级 selector/块内偏移/出现序号/最近标题/捕获时 URL),引用块附 `[位置: …]` 元信息行 → `read_page({selector})` 直达;捕获与发送 URL 不一致自动标「锚点属于另一文档」;锚点是提示不是保证(失效回退 dom_search) | 随划词捕获自动;`setQuote` 第三参可自定义 |
 

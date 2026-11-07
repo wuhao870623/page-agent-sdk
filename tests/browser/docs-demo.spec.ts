@@ -5,7 +5,7 @@ import { mockLlm, fillInput, clickSend, waitForAgentIdle } from './_helpers'
  * 学习文档站集成模板(docs-demo):划词引用(page-quote)+ read_page 正文提取 + pageContext 页面锚点。
  * 覆盖:选中→点「问 AI」开抽屉捕获 / 选中→点输入框 pointerdown 捕获 / chip 删除重挂 / 气泡引用块 /
  * LLM 请求体引用前缀 / read_page 两轮 ReAct(结果不含 SDK 对话框文案)/ system 含页面锚点 /
- * quickActions 不消费待发引用。
+ * quickActions 不消费待发引用 / 底部刷新重生成引用标签保留。
  */
 
 /** 在文章第 N 段上划选一段文字(自建 Range + addRange;不依赖鼠标轨迹) */
@@ -69,6 +69,31 @@ test.describe('划词引用 page-quote(docs-demo)', () => {
     expect(String(lastUser?.content)).toMatch(/^\[引用原文\(来源:[^\n]+\)\]\n"""\n注意力机制/)
     // 发送后待发区清空
     await expect(page.locator('[data-test="quote-chips"] .quote-chip')).toHaveCount(0)
+  })
+
+  test('底部刷新重生成:引用标签随消息保留 + 重发请求体仍带引用前缀', async ({ page }) => {
+    await page.goto('/examples/docs-demo/')
+    await page.waitForSelector('.chat-dialog', { state: 'attached' })
+    await mockLlm(page, [
+      { text: '第一版解释' },
+      { text: '重生成解释' },
+    ])
+    const bodies = await recordLlmBodies(page)
+
+    await selectArticleText(page, '注意力机制的核心思想')
+    await openDrawer(page)
+    await fillInput(page, '这段什么意思')
+    await clickSend(page)
+    await waitForAgentIdle(page)
+    await expect(page.locator('[data-test="msg-quote"] .msg-quote-text')).toContainText('注意力机制的核心思想')
+
+    // 底部刷新按钮直接重生成(不编辑消息)→ 引用标签仍在气泡上,重发请求体引用前缀不丢
+    await page.locator('[data-test="regen-btn"]').click()
+    await expect(page.locator('.chat-dialog .message-row.assistant').last()).toContainText('重生成解释', { timeout: 30_000 })
+    await expect(page.locator('[data-test="msg-quote"] .msg-quote-text')).toContainText('注意力机制的核心思想')
+    const regenUser = JSON.parse(bodies.at(-1) ?? '{}').messages?.filter((m: { role: string }) => m.role === 'user').at(-1)
+    expect(String(regenUser?.content)).toMatch(/^\[引用原文\(来源:/)
+    expect(((await page.textContent('.chat-dialog')) || '')).not.toContain('第一版解释')
   })
 
   test('S4 引用 DOM 锚点:UI 捕获链 → 请求体含 [位置: 元信息行(修前 mountChatDialog 三捕获点丢 anchor)', async ({ page }) => {

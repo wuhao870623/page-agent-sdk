@@ -403,6 +403,7 @@ export interface DialogMessages {
   copy: string
   copied: string
   regenerate: string
+  regenerateTitle: string         // 底部刷新按钮 tooltip(直接重新生成,无需编辑)
   edit: string
   editTitle: string
   editSave: string

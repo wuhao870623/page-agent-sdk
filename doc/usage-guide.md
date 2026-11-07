@@ -1987,7 +1987,7 @@ await agent.send('...')       // 发送(数组自动更新)
 agent.unmount()
 ```
 
-**复用内置 UI 模块**:headless 模式下也可 `import { ChatDialog, useChat }` 复用内置对话框组件与流式/重试/停止/重新生成/编辑重发逻辑(`ChatDialog` 接 `fetchStream`/`getInfo` 等 props),而不必从零实现 UI。`useChat.editAndResend(index, newContent)` 可编程式编辑任意位置已发送的 user 消息并从该点重跑(保留原消息的焦点/图片/引用附带字段,截断其后全部历史;生成中调用先自动 stop)—— 内置 UI 的 hover「编辑」按钮即此能力,自建 UI 可直接复用同方法。边界:开启 checkpoint 时 `restoreLastCheckpoint` 会把编辑前的消息快照整体换回,属回退的既有语义(undo 本就是回到上一存档点)。
+**复用内置 UI 模块**:headless 模式下也可 `import { ChatDialog, useChat }` 复用内置对话框组件与流式/重试/停止/重新生成/编辑重发逻辑(`ChatDialog` 接 `fetchStream`/`getInfo` 等 props),而不必从零实现 UI。`useChat.editAndResend(index, newContent)` 可编程式编辑任意位置已发送的 user 消息并从该点重跑(保留原消息的焦点/图片/引用附带字段,截断其后全部历史;生成中调用先自动 stop)—— 内置 UI 的 hover「编辑」按钮即此能力,自建 UI 可直接复用同方法。`useChat.regenerate()`(4.29 起)在尾消息是 user 的未答态(停止/失败后没答上)会跳过截断直接补答、不删该提问 —— 内置 UI 输入区的常驻「刷新」按钮即 `regenerate()` 的直接重生成入口(无需编辑消息);错误条「重试」(`retry()`)与编辑/重生成同口径保留消息的焦点/图片/划词引用附带字段。边界:开启 checkpoint 时 `restoreLastCheckpoint` 会把编辑前的消息快照整体换回,属回退的既有语义(undo 本就是回到上一存档点)。
 
 **主题定制**:`ChatDialog`/`DebugDrawer` 暴露 CSS 变量(`--cs-primary` 等,默认中性主题)与 props(`showAvatar`/`showTyping` 关头像/打字动画)。覆盖变量即可换主题:
 ```css

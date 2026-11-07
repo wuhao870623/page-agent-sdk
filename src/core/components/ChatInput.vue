@@ -7,7 +7,7 @@
  * 快捷指令(ui-quick-wins Q1):quickActions chip 行,点击直接 sendMessage(prompt) 不预填输入框。
  * 元素拖入(ui-quick-wins Q4):onDropElement 声明时 window 捕获 dragstart 记源元素,drop 无文件分流回调。
  */
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import IconGlyph from './IconGlyph.vue'
 import { useChatContext } from '../composables/chatContext'
 import { captureSelectionQuote } from '../tools/quoteInput'
@@ -28,7 +28,7 @@ const props = defineProps<{
 
 const ctx = useChatContext()
 const { inputText, send, keydown, canUndo, undo, focuses, removeFocus, focusChipClick, icons, messages: m, quote, clearQuote, setQuote } = ctx
-const { state, stop, sendMessage } = ctx.chat
+const { state, stop, sendMessage, regenerate } = ctx.chat
 const { pendingImages, addImageFiles, removePendingImage, imageInputError, compressingImages } = ctx
 
 /**
@@ -92,6 +92,14 @@ const runQuickAction = (qa: QuickActionItem): void => {
   if (props.gatePending || state.loading) return
   sendMessage(qa.prompt)
 }
+
+/** 底部刷新按钮(直接重新生成,chat-refresh):空闲 + 无挂起门禁 + 有待重跑的轮。与 hover 消息
+ *  操作里的「重新生成」同源 regenerate,但常驻可见 —— 免去「想重新生成只能编辑消息改完重发」的绕路;
+ *  尾消息是 user(停止/失败后未答)时 regenerate 不截断直接补答,故有 user 即可重跑。 */
+const canRegenerate = computed(() => {
+  if (state.loading || props.gatePending) return false
+  return state.messages.some((m) => m.role === 'user')
+})
 
 // 元素拖入源捕获(ui-quick-wins Q4):drop 的 event.target 是输入框自身拿不到被拖的源元素,
 // 故在 window 捕获阶段记 dragstart 目标;dragend/2s 超时清理(拖而不放不残留)。
@@ -208,6 +216,16 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <input ref="fileInput" type="file" accept="image/*" multiple hidden data-test="attach-input" @change="onFileChange" />
+        <!-- 刷新(chat-refresh):直接重新生成最后一条回复,无需编辑消息;与消息 hover 操作的「重新生成」同源 -->
+        <button
+          v-if="canRegenerate"
+          class="regen-btn"
+          :title="m.regenerateTitle"
+          data-test="regen-btn"
+          @click="regenerate"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /><path d="M13.7 1.8v2.8h-2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </button>
         <button
           class="send-btn"
           :class="{ 'stop-btn': state.loading }"
@@ -334,13 +352,15 @@ onBeforeUnmount(() => {
 .attach-btn:disabled:hover { color: var(--cs-bg-muted, #6b7280); background: transparent; }
 .input-actions { position: absolute; bottom: 10px; right:  10px; display: flex; align-items: center; gap: 8px; }
 .send-hint { font-size: 10px; color: var(--cs-bg-muted, #9ca3af); opacity: 0.6; pointer-events: none; white-space: nowrap; }
-.attach-btn {
+.attach-btn,
+.regen-btn {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border: none; border-radius: 6px;
   background: transparent; color: var(--cs-bg-muted, #6b7280); cursor: pointer;
   transition: color 0.15s, background 0.15s; flex-shrink: 0;
 }
-.attach-btn:hover { color: var(--cs-primary, #1f4d3a); background: rgba(var(--cs-primary-rgb, 31, 77, 58), 0.08); }
+.attach-btn:hover,
+.regen-btn:hover { color: var(--cs-primary, #1f4d3a); background: rgba(var(--cs-primary-rgb, 31, 77, 58), 0.08); }
 .send-btn {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border: none; border-radius: var(--cs-send-radius, 50%);

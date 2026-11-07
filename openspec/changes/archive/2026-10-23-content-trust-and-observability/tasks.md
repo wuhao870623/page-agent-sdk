@@ -47,7 +47,10 @@
 
 ## 4 · 发布门禁(用户说「发布」才执行)
 
-- [ ] 4.1 `npm run build && npm test && npm run test:e2e && npm run test:browser`
-- [ ] 4.2 `npm run test:exports && npm run test:types && npm run test:types-alignment && npm run test:types-novue && npm run test:size`
-- [ ] 4.3 `node scripts/check-test-counts.mjs`(三计数 + README 徽章对账)→ `npm pack --dry-run`
-- [ ] 4.4 bump minor(4.28.0)→ develop commit → `./scripts/publish.sh` → `npm publish` → 验证(npm view / 临时安装实调 approval_resolved 事件与 contentTrust / CDN)
+- [x] 4.1 `npm run build && npm test && npm run test:e2e && npm run test:browser`
+  - 注:实跑 4.28.0 全绿 —— selftest 3927/0、e2e 1339/0、browser 191+1skip/0(5173 被 learning dev server 占用,5199 临时配置)。
+- [x] 4.2 `npm run test:exports && npm run test:types && npm run test:types-alignment && npm run test:types-novue && npm run test:size`
+- [x] 4.3 `node scripts/check-test-counts.mjs`(三计数 + README 徽章对账)→ `npm pack --dry-run`
+  - 注:CHANGELOG 折叠 [4.28.0] 后对账「✓ 计数一致」;pack 25 files 无 .env/src/examples 泄漏。
+- [x] 4.4 bump minor(4.28.0)→ develop commit → `./scripts/publish.sh` → `npm publish` → 验证(npm view / 临时安装实调 approval_resolved 事件与 contentTrust / CDN)
+  - 注:master release commit `0e69eb0` 推 Gitee、develop 重建对齐;npm publish 后 staged 队列数分钟翻面;临时安装实调 6/6 PASS(contentTrust 围栏/onSuspicion/缺省裸拼/injectionSuspicions/approval_resolved via:'timeout' 真 ReAct 驱动);CDN esm.sh 探针复验。

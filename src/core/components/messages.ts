@@ -51,6 +51,8 @@ export interface DialogMessages {
   copy: string
   copied: string
   regenerate: string
+  /** 底部刷新按钮(chat-refresh):直接重新生成最后一条回复的 tooltip(无需编辑消息) */
+  regenerateTitle: string
   /** 消息编辑(edit-and-resend):user 消息编辑按钮文案/提示/保存/取消 */
   edit: string
   editTitle: string
@@ -304,6 +306,7 @@ export const MESSAGES_ZH_CN: DialogMessages = {
   copy: '复制',
   copied: '已复制',
   regenerate: '重新生成',
+  regenerateTitle: '重新生成最后一条回复(无需编辑消息)',
   edit: '编辑',
   editTitle: '编辑后重发:之后的回复将被移除并重新生成',
   editSave: '保存并重发',
@@ -547,6 +550,7 @@ export const MESSAGES_EN_US: DialogMessages = {
   copy: 'Copy',
   copied: 'Copied',
   regenerate: 'Regenerate',
+  regenerateTitle: 'Regenerate the last reply (no editing needed)',
   edit: 'Edit',
   editTitle: 'Edit & resubmit: replies after it will be removed and regenerated',
   editSave: 'Save & resubmit',

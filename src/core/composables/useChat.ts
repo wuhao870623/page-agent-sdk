@@ -10,7 +10,8 @@
  *  - onClear:清空时回调(新建会话)
  *
  * sendMessage / regenerate / editAndResend 共用 runAssistantStream:send 先 push user;regenerate 移除旧
- * assistant 后以历史重发;editAndResend 改写任意位置 user 消息(保留附带字段)截断其后重跑。
+ * assistant 后以历史重发(尾消息是 user 的未答态则不截断直接补答);editAndResend 改写任意位置 user
+ * 消息(保留附带字段)截断其后重跑。
  */
 import { reactive, ref } from 'vue'
 import type { AgentMessage, AgentState, StreamHandler, ToolStep, AgentImage, MessageQuote } from '../types'
@@ -334,15 +335,19 @@ export function useChat(opts: UseChatOptions = {}) {
     await runAssistantStream(currentController.signal)
   }
 
-  /** 重新生成最后一条 assistant 回复:移除它(及尾部)→ 以当前历史(含最后 user)重发 */
+  /** 重新生成最后一条 assistant 回复:移除它(及尾部)→ 以当前历史(含最后 user)重发。
+   *  尾消息是 user(停止/失败后未答)时历史已以待答 user 结尾,不截断直接补答 —— 底部刷新按钮
+   *  的直接重生成入口(无需编辑消息);此时若走截断分支会误删该提问(从上一条 assistant 起全清)。 */
   async function regenerate() {
     if (state.loading) return
     onBeforeRegenerate?.()  // 清代码资产复用缓存:用户主动重新生成 → 强制子 agent 重生成而非复用工作副本
     const msgs = state.messages
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === 'assistant') {
-        msgs.splice(i) // 移除该 assistant 及其后所有
-        break
+    if (msgs[msgs.length - 1]?.role !== 'user') {
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === 'assistant') {
+          msgs.splice(i) // 移除该 assistant 及其后所有
+          break
+        }
       }
     }
     // 需有 user 可重发
@@ -367,7 +372,7 @@ export function useChat(opts: UseChatOptions = {}) {
     // 空文本且无图拒绝(纯图消息允许空文本,落回占位符保持图片-only 语义)
     if (!content && !hasImages) return
     if (state.loading) stop()
-    // 附带字段保留重发(retry 路径丢字段的补全:焦点/图片/引用随编辑后的消息原样再进历史)
+    // 附带字段保留重发(焦点/图片/引用随编辑后的消息原样再进历史,retry 同口径)
     const { focuses, images, quote } = original
     onBeforeRegenerate?.() // 同 regenerate:清子 agent 代码复用缓存,防重跑复用旧工作副本
     state.messages.splice(index)
@@ -422,7 +427,9 @@ export function useChat(opts: UseChatOptions = {}) {
     p.resolve(approved)
   }
 
-  /** 重试最后一条用户消息:移除其后所有消息(失败占位),清错误,重发 */
+  /** 重试最后一条用户消息:移除其后所有消息(失败占位),清错误,重发。
+   *  附带字段原样随行(focuses/images/quote)—— 修「重试把划词引用标签弄没了」:重建 user 消息
+   *  只带 content 会丢选中内容的引用标签/聚焦/图片(editAndResend 已保留,retry 同口径补全)。 */
   async function retry() {
     if (!state.error) return // 仅出错时重试
     const msgs = state.messages
@@ -434,10 +441,10 @@ export function useChat(opts: UseChatOptions = {}) {
       }
     }
     if (lastUserIdx < 0) return
-    const content = msgs[lastUserIdx].content
+    const { content, focuses, images, quote } = msgs[lastUserIdx]
     msgs.splice(lastUserIdx) // 移除该 user 及其后所有消息(失败的 assistant 占位)
     state.error = null
-    await sendMessage(content)
+    await sendMessage(content, focuses, images, quote)
   }
 
   return { state, scrollContainer, pendingApproval, queuedTasks, sendMessage, removeQueuedTask, clearMessages, stop, reset, retry, regenerate, editAndResend, resolveApproval, onScroll, onWheel }

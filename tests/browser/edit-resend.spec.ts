@@ -17,6 +17,7 @@ async function waitEditRound(page: Page, replyText: string): Promise<void> {
  * - Enter 提交 / Esc 取消;两条消息编辑互斥(点 B 弃 A)
  * - 生成中点编辑 = 自动停止(stop-btn 消失)再编辑
  * - 附带字段保留:聚焦发送的消息编辑重发后 focus chip 仍在
+ * - 底部刷新按钮(chat-refresh):空闲常驻直接重生成最后一条回复;停止后未答态(尾 user)直接补答不删提问
  */
 test.describe('edit-resend: 编辑已发送消息重跑', () => {
   test.beforeEach(async ({ page }) => {
@@ -161,5 +162,50 @@ test.describe('edit-resend: 编辑已发送消息重跑', () => {
     await waitEditRound(page, '编辑重跑回复')
     const newRow = page.locator('.chat-dialog .message-row.user[data-msg-idx="0"]')
     await expect(newRow.locator('.msg-focus-chip')).toHaveCount(1)
+  })
+
+  test('底部刷新按钮:直接重新生成最后一条回复(无需编辑)', async ({ page }) => {
+    const { calls } = await mockLlm(page, [
+      { text: '第一版回复' },
+      { text: '重生成回复' },
+    ])
+    await fillInput(page, '提问一')
+    await clickSend(page)
+    await waitForAgentIdle(page)
+    await expect(page.locator('.chat-dialog .message-row.assistant').last()).toContainText('第一版回复')
+
+    // 空闲后底部刷新按钮常驻可见 → 点击直接重生成(不进编辑)
+    await expect(page.locator('[data-test="regen-btn"]')).toBeVisible()
+    await page.locator('[data-test="regen-btn"]').click()
+    await waitEditRound(page, '重生成回复')
+    expect(await calls()).toBeGreaterThanOrEqual(2)
+    const dialogText = (await page.textContent('.chat-dialog')) || ''
+    expect(dialogText).toContain('提问一')        // 提问不动
+    expect(dialogText).not.toContain('第一版回复') // 旧回复被替换(重新生成非追加)
+    // 重生成完按钮回归可见
+    await expect(page.locator('[data-test="regen-btn"]')).toBeVisible()
+  })
+
+  test('停止后无回复:刷新按钮直接补答(不删提问)', async ({ page }) => {
+    // 首轮延迟 2500ms 制造 loading 窗口,停止时无内容 → 空占位移除,历史尾是 user
+    await mockLlm(page, [
+      { text: '不该出现的回复' },
+      { text: '停止后补答' },
+    ], [2500, 0])
+    await fillInput(page, '生成中被停的提问')
+    await clickSend(page)
+    await page.waitForSelector('.chat-dialog .stop-btn', { timeout: 10_000 })
+    await page.click('.chat-dialog .stop-btn')
+
+    // 停止后尾消息是 user(未答态)→ 刷新按钮可见,点击直接补答(历史不截断、提问不删)
+    await expect(page.locator('[data-test="regen-btn"]')).toBeVisible({ timeout: 10_000 })
+    await page.locator('[data-test="regen-btn"]').click()
+    await waitEditRound(page, '停止后补答')
+    const dialogText = (await page.textContent('.chat-dialog')) || ''
+    expect(dialogText).toContain('生成中被停的提问')
+    expect(dialogText).not.toContain('不该出现的回复')
+    // 补答后消息形态:user 提问 + assistant 补答各一条(无重复提问)
+    await expect(page.locator('.chat-dialog .message-row.user')).toHaveCount(1)
+    await expect(page.locator('.chat-dialog .message-row.assistant')).toHaveCount(1)
   })
 })

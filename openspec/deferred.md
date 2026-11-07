@@ -753,3 +753,7 @@ A3 曾写「116 个模块」,实测 sec-*.ts = **115**(runner import 同数)—�
 ## 2026-10-14(approval 一次性授权落地时的伴生残项)
 
 - ✅ **`approval_resolved` 外发事件**(宿主外部观察裁决结果):已随 openspec change `content-trust-and-observability`(4.28)收口 —— 载荷只读形态 `{toolName, approved, granted?, choice?, via:'user'|'timeout'|'abort'}`(不带 resolve/hold,防双重收口误用,正是本条当初暂缓的设计前提),approval 工具确认与 RHC 两通道统一覆盖;`approval_request` 维持不外发。触发条件「集成方需要在 UI/埋点里联动用户点了允许/授权」已由 learning 画像/技能面板与批注确认到达。
+
+## 2026-10-23(4.28.0 发布后修复批的发现登记)
+
+- **测试模块类型卫生欠账(~113 处,被 sec-137 tsgo 解析误报掩盖)**:2026-10-23 修复批试图改写 sec-137.ts:43 的 `async () => ({…, status: 'done' as const})`(TS7/tsgo 对该形态报 7 个 TS1003/1005 语法错,tsx/esbuild 正常所以 npm test 恒绿)—— 改后 tsc 输出从 7 涨到 113:原语法错一直在**压制全 `__tests__` 树的语义检查输出**,底下沉着 ~106 处存量松动(TS2339×47 / TS2722×19 / TS2532×12 / TS6133×10 / 其余类型不匹配,散布 sec-75/104-134 等十余模块,多为手写 stub 漂移与未用变量)。已回退该改写(7 个噪声 < 113 个噪声);项目门禁本就显式过滤 `__tests__`,运行时零影响。**重启触发**:想要 IDE/tsc 零噪声或把 CI 升级为全量 tsc 门禁时专项清理 —— 届时顺手改写 sec-137 该行(块体 return)一并解锁。

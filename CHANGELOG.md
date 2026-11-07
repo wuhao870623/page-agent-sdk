@@ -2,6 +2,16 @@
 
 本变更日志基于 git commit 历史整理,遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 风格,版本号对应 npm 发布版本。
 
+## [4.29.0] - 2026-11-07
+
+### Added
+
+- **聊天底部刷新按钮(chat-refresh,直接重新生成)**:输入区常驻刷新入口(空闲 + 无挂起门禁 + 有 user 消息即显示,📎 与发送按钮之间)—— 点一下直接 `regenerate()` 重生成最后一条回复,免去「想重新生成只能 hover 消息找按钮、或编辑消息改完重发」的绕路;与 hover 消息操作里的「重新生成」同源。`regenerate()` 新增**未答态分支**:尾消息是 user(上一轮停止/失败没答上)时历史已以待答提问结尾,不走截断分支直接补答 —— 旧行为从上一条 assistant 起全清,会把这个未被回答的提问一并误删。i18n 新增 `regenerateTitle`(中英;`DialogMessages` 类型同步)。selftest 新增 sec-141(+19)/ browser edit-resend(+2)· docs-demo(+1);selftest 3927 → **3946** / browser 191 → **194**(e2e 1339 未变)。
+
+### Fixed
+
+- **`retry()`(错误条重试)保留附带字段**:重建 user 消息时补带 `focuses`/`images`/`quote`(`editAndResend` 同口径)—— 修「划词引用发送后失败重试,选中内容的引用标签连同聚焦/图片全部丢失」;附带字段随重建消息进重发历史,LLM 上下文的引用前缀(`appendQuoteContext`)不丢。
+
 ## [4.28.0] - 2026-10-23
 
 ### Added
