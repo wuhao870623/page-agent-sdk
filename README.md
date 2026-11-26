@@ -1,13 +1,13 @@
 # page-agent-sdk
 
-> **[English](https://github.com/whyymj/page-agent-sdk/blob/master/README.md)** · **[中文](https://github.com/whyymj/page-agent-sdk/blob/master/README.zh-CN.md)**
+> **[English](https://github.com/wuhao870623/page-agent-sdk/blob/master/README.md)** · **[中文](https://github.com/wuhao870623/page-agent-sdk/blob/master/README.zh-CN.md)**
 
 > Give your web page an **AI assistant that edits the page itself**. Mount a chat dialog in one line; the AI reads/writes page data safely via schema-validated tools — "conversational" building/editing/ops. **A lighter, framework-agnostic alternative to CopilotKit / LangChain for in-page, schema-validated JSON-editing agents.**
 
-> **AI agent integration**: see [Agent Integration Cheat Sheet](#agent-integration-cheat-sheet-for-ai-agents) below (exports / options / extension points / built-in tools / file structure). Architecture & gotchas in [`CLAUDE.md`](https://github.com/whyymj/page-agent-sdk/blob/master/CLAUDE.md).
+> **AI agent integration**: see [Agent Integration Cheat Sheet](#agent-integration-cheat-sheet-for-ai-agents) below (exports / options / extension points / built-in tools / file structure). Architecture & gotchas in [`CLAUDE.md`](https://github.com/wuhao870623/page-agent-sdk/blob/master/CLAUDE.md).
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
-[![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
+[![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/wuhao870623/page-agent-sdk/blob/master/LICENSE)
 [![tests](https://img.shields.io/badge/self%20tests-3946%20asserts-brightgreen.svg)](#self-tests)
 
 ---
@@ -16,32 +16,32 @@
 
 ## Usage map (task → where)
 
-Starting point for both humans and AI agents (Claude Code / Cursor): find the feature you need, follow the link. Details live in sub-docs — [doc/](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.en.md) index.
+Starting point for both humans and AI agents (Claude Code / Cursor): find the feature you need, follow the link. Details live in sub-docs — [doc/](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.en.md) index.
 
 | I want to… | See |
 |---|---|
 | Just add an AI chat box (no data ops) | [30-second quickstart](#30-second-quickstart) · `examples/minimal-demo` |
-| AI edits my page data (schema + bind) | [Design: three-layer split](#design-the-schema--systemprompt--skill-three-layer-split) · [usage-guide §6.1](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#61-data-ops-single-main-object--let-the-agent-edit-your-json) |
-| Custom tools / skills / memory / middleware | [Extension points](#extension-points) · [usage-guide §6.2–6.4, §7](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
-| Connect LLM (DeepSeek/OpenAI-compatible/Claude/proxy, no apiKey leak) | [Configuration](#configuration) · [usage-guide §8.6 Proxy](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) · `examples/proxy-demo` |
+| AI edits my page data (schema + bind) | [Design: three-layer split](#design-the-schema--systemprompt--skill-three-layer-split) · [usage-guide §6.1](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md#61-data-ops-single-main-object--let-the-agent-edit-your-json) |
+| Custom tools / skills / memory / middleware | [Extension points](#extension-points) · [usage-guide §6.2–6.4, §7](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
+| Connect LLM (DeepSeek/OpenAI-compatible/Claude/proxy, no apiKey leak) | [Configuration](#configuration) · [usage-guide §8.6 Proxy](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) · `examples/proxy-demo` |
 | Headless / Node.js (own UI, no dialog) | [Bundle size & tree-shaking](#bundle-size--tree-shaking) (headless subpath) · `examples/headless-demo`, `examples/customize-demo` |
 | Old bundler (webpack ≤4 / vue-cli 2-3) | [Bundle size & tree-shaking](#bundle-size--tree-shaking) (legacy subpath, es2017 all-inlined) |
 | HTML/code components (AI writes page blocks) | [Capability packs](#createchatsdk-options-cheat-sheet) (`createHtmlSubagent`, auto-registered 3.9+) · `examples/html-page-demo`, `examples/complex-demo` |
 | RAG / MCP tools | [Capability packs](#createchatsdk-options-cheat-sheet) (`createRagSubagent`, `mcp`) · `examples/rag-demo` |
-| Let the AI see images (paste/drop/pick) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`images` / `llm.vision`) · [usage-guide §6.17](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#617-image-input-multimodal-direct--captioning-bypass) · `examples/images-demo` |
-| Docs-site QA (quote a selection + read the current page) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`dialog.autoQuote` / `capabilities.domInspect` + `pageContext`) · [usage-guide §6.20](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#620-text-selection-quoting--page-qa-page-quote--read_page--pagecontext) · `examples/docs-demo` |
-| Host-page QA reliability (SPA doc-switch invalidation / no-guessing gate / quote DOM anchor) | `sdk.notifyHostChange({reason})` on route change · page-assertion gate auto-mounted with `domInspect` · quote anchor captured with selections (`setQuote` 3rd arg) · [usage-guide §6.20](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#620-text-selection-quoting--page-qa-page-quote--read_page--pagecontext) |
+| Let the AI see images (paste/drop/pick) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`images` / `llm.vision`) · [usage-guide §6.17](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md#617-image-input-multimodal-direct--captioning-bypass) · `examples/images-demo` |
+| Docs-site QA (quote a selection + read the current page) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`dialog.autoQuote` / `capabilities.domInspect` + `pageContext`) · [usage-guide §6.20](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md#620-text-selection-quoting--page-qa-page-quote--read_page--pagecontext) · `examples/docs-demo` |
+| Host-page QA reliability (SPA doc-switch invalidation / no-guessing gate / quote DOM anchor) | `sdk.notifyHostChange({reason})` on route change · page-assertion gate auto-mounted with `domInspect` · quote anchor captured with selections (`setQuote` 3rd arg) · [usage-guide §6.20](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md#620-text-selection-quoting--page-qa-page-quote--read_page--pagecontext) |
 | 📡 Auto host-change reporting (4.21+) | `hostWatch: true` — URL change (hashchange/popstate) auto-fires the full notifyHostChange chain, turning "the defense relies on the host remembering to call" into "the defense is automatic"; pushState patch / title watching are opt-in; debounce merging + `ignore` hook; server/headless degrades to a silent no-op (`inspect().hostWatch` reflection). Also: dom_edit/dom_restore landing auto-invalidates prior page reads (default-on) | `hostWatch` |
 | 📝 Content proposals — review & apply (4.22+) | `proposals: { read, onProposal }`: controlled editing for content outside the data slot — `read_content` (base + hash) → `propose_content` (**incremental ops**: literal unique anchors, atomic; tokens scale with the change; base-hash drift rejected) → host diff panel → write-back only on explicit user apply; `sdk.resolveProposal` closes the loop (events + next-turn outcome notice); model has zero write permission, unconfigured = zero registration; `lineDiff/applyProposalOps/hashContent` exported; **(4.26.1+) read-channel failures come back as structured `ERROR: {code:'CONTENT_READ_FAILED'}` with a don't-retry hint + a `read_failed` debugLogs entry** (`read` returning `null` stays a normal empty state) | `proposals` + `sdk.resolveProposal` |
 | ✏️ Edit sent message & rerun (4.25+) | hover any sent user message → "Edit" → edit in-bubble (Enter save / Esc cancel / IME-safe) → history after it is truncated and rerun from that point; focus/image/quote attachments preserved; clicking edit mid-generation auto-stops first; `roundSeq` generation-guard makes the stale round's async teardown a no-op; `useChat.editAndResend(index, newContent)` for programmatic use in custom UI | built-in UI automatic; custom UI via `useChat` |
 | 🔄 Refresh & regenerate (4.29+) | always-visible refresh button in the input area: regenerate the last reply directly (no message editing needed); when the last message is an unanswered user turn (stopped/failed), it re-answers directly without deleting the question; the error-bar retry now preserves focus/image/**text-selection quote** attachments (fixes "retry losing the quote tag"); the hover "Regenerate" action on messages remains | built-in UI automatic |
-| Customize UI (theme / icons / i18n / button labels) | [`DialogConfig` fields](#dialogconfig-fields) · [usage-guide §6.15](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md#615-ui-customization--i18n-icons--theme--language--message-overrides-317321) · `examples/i18n-demo` |
+| Customize UI (theme / icons / i18n / button labels) | [`DialogConfig` fields](#dialogconfig-fields) · [usage-guide §6.15](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md#615-ui-customization--i18n-icons--theme--language--message-overrides-317321) · `examples/i18n-demo` |
 | Sessions / persistence (IndexedDB) | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`storage`/`session`) · `examples/page-demo` (`storage:'indexed'` + built-in history dropdown) |
-| Long conversations / big JSON (context & compression) | [usage-guide §6.8](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) · [context-management doc](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md) |
-| Events / audit / token usage | [Configuration](#configuration) (`onEvent`/`onAudit`/`sdk.usage`) · [usage-guide §6.9](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
-| Unattended automation / batch / budget | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`capabilities.automation`, `sdk.batch`) · [usage-guide automation section](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
+| Long conversations / big JSON (context & compression) | [usage-guide §6.8](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) · [context-management doc](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md) |
+| Events / audit / token usage | [Configuration](#configuration) (`onEvent`/`onAudit`/`sdk.usage`) · [usage-guide §6.9](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
+| Unattended automation / batch / budget | [options cheat sheet](#createchatsdk-options-cheat-sheet) (`capabilities.automation`, `sdk.batch`) · [usage-guide automation section](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) |
 | Debug (prompts / tool IO / context) | `debug: true` + built-in DebugDrawer · `sdk.inspect()` / `sdk.debugLogs` / `sdk.inspectContext()` / `sdk.exportDiagnostics()` (one-click diagnostics report, copy the full text to the maintainer) |
-| Everything, full API | [Agent Integration Cheat Sheet](#agent-integration-cheat-sheet-for-ai-agents) · [usage-guide](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) · [doc index](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.en.md) |
+| Everything, full API | [Agent Integration Cheat Sheet](#agent-integration-cheat-sheet-for-ai-agents) · [usage-guide](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) · [doc index](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.en.md) |
 
 ## Who is it for
 
@@ -374,7 +374,7 @@ npm i page-agent-sdk
 cp -R node_modules/page-agent-sdk/skills/page-agent-sdk-integrate ~/.claude/skills/
 
 # Option B — download from the repo (no install needed)
-curl -L https://github.com/whyymj/page-agent-sdk/tarball/master | tar xz --strip-components=1 --wildcards '*/skills/page-agent-sdk-integrate'
+curl -L https://github.com/wuhao870623/page-agent-sdk/tarball/master | tar xz --strip-components=1 --wildcards '*/skills/page-agent-sdk-integrate'
 mv skills/page-agent-sdk-integrate ~/.claude/skills/
 ```
 
@@ -509,12 +509,12 @@ function switchTo(i: number) {
 
 | Doc | Contents |
 |---|---|
-| [Doc Index](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.en.md) | Navigation + other info sources (specs/changes/tests) |
-| [Usage Guide](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.en.md) | Install / options / capability deep-dive / custom middleware / FAQ |
-| [Architecture](https://github.com/whyymj/page-agent-sdk/blob/master/doc/architecture.md) *(Chinese)* | Layering / control flow / window-op safety flow |
-| [Context & Compression](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md) *(Chinese)* | Context composition / 4-layer compression / flow diagrams |
-| [File Overview](https://github.com/whyymj/page-agent-sdk/blob/master/doc/architecture-files.md) *(Chinese)* | Per-file responsibilities / deps / data flow |
-| [CLAUDE.md](https://github.com/whyymj/page-agent-sdk/blob/master/CLAUDE.md) | **agent must-read** · architecture / gotchas / coding conventions |
+| [Doc Index](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.en.md) | Navigation + other info sources (specs/changes/tests) |
+| [Usage Guide](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.en.md) | Install / options / capability deep-dive / custom middleware / FAQ |
+| [Architecture](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/architecture.md) *(Chinese)* | Layering / control flow / window-op safety flow |
+| [Context & Compression](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md) *(Chinese)* | Context composition / 4-layer compression / flow diagrams |
+| [File Overview](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/architecture-files.md) *(Chinese)* | Per-file responsibilities / deps / data flow |
+| [CLAUDE.md](https://github.com/wuhao870623/page-agent-sdk/blob/master/CLAUDE.md) | **agent must-read** · architecture / gotchas / coding conventions |
 
 ## Self-tests
 
@@ -615,7 +615,7 @@ npm test
 
 ## Relationship to Deep Agents
 
-Borrows the harness idea from [Deep Agents](https://github.com/langchain-ai/deepagents) (ReAct + middleware + planning + skills + memory + context management), but implemented in-house: no LangGraph/langchain full bundle; browser-oriented (persistence via IndexedDB, not server-side DB); context via input compression + memory trim + large-result offload, rather than per-step checkpointer archival. See [Context & Compression - Differences from Deep Agents](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md#七与-deep-agents-的差异).
+Borrows the harness idea from [Deep Agents](https://github.com/langchain-ai/deepagents) (ReAct + middleware + planning + skills + memory + context management), but implemented in-house: no LangGraph/langchain full bundle; browser-oriented (persistence via IndexedDB, not server-side DB); context via input compression + memory trim + large-result offload, rather than per-step checkpointer archival. See [Context & Compression - Differences from Deep Agents](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md#七与-deep-agents-的差异).
 
 ## Acknowledgments
 
@@ -642,4 +642,4 @@ the 29 reference files are kept verbatim from upstream.
 
 ## License
 
-[ISC](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
+[ISC](https://github.com/wuhao870623/page-agent-sdk/blob/master/LICENSE)

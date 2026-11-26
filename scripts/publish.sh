@@ -7,7 +7,8 @@
 #   - 发布后:重建 develop = master(丢弃已被 squash 的 develop commit,防下次重复 squash)
 # 约定:
 #   - 个人笔记 doc/待确认问题.md 在 .gitignore 未跟踪,不提交
-#   - GitHub 分发通道已停用(2026-09-28):单远程 Gitee;若恢复,历史版 scripts/publish-github.sh 可从 git 找回
+#   - GitHub 镜像(github.com/wuhao870623/page-agent-sdk,remote 名 github)不经本脚本,发布后手动同步:
+#     git push github master && git push --force-with-lease github develop(develop 已被本脚本重建,需强推)
 # 用法:
 #   ./scripts/publish.sh "release x.x.x: 一句话总结"   # 推荐:参数作发布 commit message
 #   ./scripts/publish.sh                               # 默认 message "release: publish from develop"

@@ -226,7 +226,7 @@ createChatSdk({
 | 名称 | 位置 | 公开范围 | 用途 |
 |---|---|---|---|
 | `page-agent-sdk-integrate` | `skills/`(入 npm 包) | ✅ 公开分发 | 集成 SDK 进网页(选引入方式/声明 data/配 llm/挂载/事件/headless/排坑);含 `references/integration-prompt.md` 通用对接提示词模板 |
-| `page-agent-sdk-release` | `.claude/skills/` | 🔒 维护者自用 | 发布新版本(bump→build→test→推 Gitee→npm publish→验证) |
+| `page-agent-sdk-release` | `.claude/skills/` | 🔒 维护者自用 | 发布新版本(bump→build→test→推 Gitee + 同步 GitHub 镜像→npm publish→验证) |
 | `browser-e2e-testing` | `.claude/skills/` | 🔒 维护者自用 | Playwright 浏览器 E2E(mock LLM 原理/写新测试模板) |
 | `openspec-*`(4 个) | `.claude/skills/` | 🔒 维护者自用 | OpenSpec 变更流程(propose/explore/apply/archive) |
 | `/browser-e2e` `/browser-test` `/opsx:*` | `.claude/commands/` | 🔒 | 交互式浏览器探索 / 自动化回归门禁 / OpenSpec 命令 |
@@ -235,14 +235,15 @@ createChatSdk({
 
 包名 `page-agent-sdk`(`package.json` 已配 `exports`/`files`/`peerDependencies`/`unpkg`/`jsdelivr`)。三种引入:npm / CDN·ESM(esm.sh)/ CDN·IIFE(unpkg 单文件)。
 
-### 单远程仓库(Gitee)
+### 双远程仓库(Gitee 主 + GitHub 镜像)
 | remote | 定位 |
 |---|---|
-| `origin`(gitee chat-agent) | 📦 唯一远程(develop 细粒度 commit + master 发布 commit) |
+| `origin`(gitee chat-agent) | 📦 主远程(develop 细粒度 commit + master 发布 commit) |
+| `github`(github.com/wuhao870623/page-agent-sdk) | GitHub 镜像,不经发布脚本,手动同步(命令见下) |
 
-> GitHub 分发通道已于 2026-09-28 停用(账号不可用):remote 已移除,`scripts/publish-github.sh` 由 `scripts/publish.sh`(Gitee 单远程)替代;README/npm 的 github 链接未动(账号若恢复仍有效,历史脚本可从 git 找回)。
+> 历史变迁:GitHub 通道 2026-09-28 曾停用(原 `whyymj` GitHub 账号不可登录,旧仓库 `whyymj/page-agent-sdk` 公开只读);2026-11-26 在 `wuhao870623` 账号下重建仓库恢复。**SSH 认证**:本机 `~/.ssh/id_ed25519_github` 绑定 `wuhao870623` 账号(注意与 npm/Gitee 的 `whyymj` 不是同一账号);代理环境下 SSH 22 端口偶发 `Connection closed`,重试即可。`scripts/publish.sh` 仍只推 Gitee —— 发布后手动补推 GitHub(`develop` 已被脚本重建,须强推):`git push github master && git push --force-with-lease github develop`。**链接归属**:`README.md`/`README.zh-CN.md` 的全部仓库链接与 `package.json` 的 `homepage`/`repository`/`bugs` 指向 `wuhao870623`;CHANGELOG 内历史条目的旧链接保持原样(当时的事实记录,旧仓库公开可达)。
 
-**分支工作流**:日常开发在 `develop`(细粒度提交,`git push origin develop`);**master 只在发布时动**。发布时 `./scripts/publish.sh "release x.x.x: 总结"`(master 上 `merge --squash develop` 总结成一个发布 commit → 推 Gitee)。个人笔记 `doc/待确认问题.md` 在 `.gitignore`,不进 git。
+**分支工作流**:日常开发在 `develop`(细粒度提交,`git push origin develop`,需要时 `git push github develop` 同步镜像);**master 只在发布时动**,且**两端默认分支都是 master** —— 仓库首页 README、npm 页面的 README 与侧栏链接只在发布时更新。发布时 `./scripts/publish.sh "release x.x.x: 总结"`(master 上 `merge --squash develop` 总结成一个发布 commit → 推 Gitee → 手动补推 GitHub)。个人笔记 `doc/待确认问题.md` 在 `.gitignore`,不进 git。
 
 ### npm 发布约定
 - **账号**:`whyymj`(已开 2FA;**禁止在文档/仓库/聊天记录中留存密码或 token 明文**;凭据只存本机 user 级 `~/.npmrc`)
@@ -282,7 +283,7 @@ createChatSdk({
 3. **bump**:`npm version patch|minor|major --no-git-tag-version`(定级先过「公共面变更纪律」自查;**package-lock.json 一并 commit**)
 4. **门禁**:按「发布前必跑顺序」全绿
 5. **提交**:`git add -A && git commit -m "feat/fix/docs: ..."`
-6. **推远程**:`git checkout master` → `./scripts/publish.sh "release x.x.x: 一句话总结"`(要求工作区干净;完成后切回 develop)
+6. **推远程**:`git checkout master` → `./scripts/publish.sh "release x.x.x: 一句话总结"`(要求工作区干净;只推 Gitee)→ 补推 GitHub 镜像 `git push github master && git push --force-with-lease github develop`(完成后切回 develop)
 7. **发 npm**:`npm publish`
 8. **验证**:`npm view` + 临时安装 + CDN 可达性(见测试流程 §5)
 

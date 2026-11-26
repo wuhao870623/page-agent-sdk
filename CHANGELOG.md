@@ -2,6 +2,12 @@
 
 本变更日志基于 git commit 历史整理,遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 风格,版本号对应 npm 发布版本。
 
+## [4.29.1] - 2026-11-26
+
+### Changed
+
+- **GitHub 仓库迁移至 [`wuhao870623/page-agent-sdk`](https://github.com/wuhao870623/page-agent-sdk)**:原 `whyymj` GitHub 账号自 2026-09-28 起不可登录(分发通道停用,仅剩 Gitee),2026-11-26 在新账号下重建仓库并恢复为镜像远程(`github`;Gitee 仍是主远程 `origin`,分支工作流不变)。`README.md` / `README.zh-CN.md` 的全部仓库链接(语言切换、文档跳转、LICENSE、tarball 安装命令)与 `package.json` 的 `homepage` / `repository` / `bugs` 同步改指新地址 —— npm 页面的 Homepage / Repository / Issues 入口随之指向可管理的新仓库。历史条目内的旧链接保持原样(当时的事实记录;旧仓库公开只读,链接仍可达)。纯文档与包元数据变更,无代码改动(测试计数同 4.29.0)。
+
 ## [4.29.0] - 2026-11-07
 
 ### Added

@@ -1,13 +1,13 @@
 # page-agent-sdk
 
-> **[English](https://github.com/whyymj/page-agent-sdk/blob/master/README.md)** · **[中文](https://github.com/whyymj/page-agent-sdk/blob/master/README.zh-CN.md)**
+> **[English](https://github.com/wuhao870623/page-agent-sdk/blob/master/README.md)** · **[中文](https://github.com/wuhao870623/page-agent-sdk/blob/master/README.zh-CN.md)**
 
 > 给网页一个**会改页面的 AI 助手**。一行代码挂载对话框，AI 通过工具按 schema 安全读写页面数据，实现「对话式」搭建/编辑/运维。**比 CopilotKit / LangChain 更轻、框架无关的「页面内、schema 校验、JSON 编辑 Agent」方案。**
 
-> **AI agent 接入**：直接看下方「[Agent 接入速查](#agent-接入速查给-ai-agent-读)」（导出 / 选项表 / 扩展点 / 内置工具 / 文件结构），架构与约定坑见 [`CLAUDE.md`](https://github.com/whyymj/page-agent-sdk/blob/master/CLAUDE.md)。
+> **AI agent 接入**：直接看下方「[Agent 接入速查](#agent-接入速查给-ai-agent-读)」（导出 / 选项表 / 扩展点 / 内置工具 / 文件结构），架构与约定坑见 [`CLAUDE.md`](https://github.com/wuhao870623/page-agent-sdk/blob/master/CLAUDE.md)。
 
 [![npm](https://img.shields.io/npm/v/page-agent-sdk.svg)](https://www.npmjs.com/package/page-agent-sdk)
-[![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
+[![license](https://img.shields.io/badge/license-ISC-blue.svg)](https://github.com/wuhao870623/page-agent-sdk/blob/master/LICENSE)
 [![tests](https://img.shields.io/badge/self%20tests-3946%20asserts-brightgreen.svg)](#自测)
 
 ---
@@ -16,27 +16,27 @@
 
 ## 用法地图(任务 → 去哪找)
 
-人类与 AI 代理(Claude Code / Cursor)的单入口:按要做的功能找对应文档。详细说明在子文档 [`doc/`](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.md)(索引)。
+人类与 AI 代理(Claude Code / Cursor)的单入口:按要做的功能找对应文档。详细说明在子文档 [`doc/`](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.md)(索引)。
 
 | 我想… | 去哪 |
 |---|---|
 | 只加个 AI 对话框(不操作数据) | [30 秒上手](#30-秒上手) · `examples/minimal-demo` |
-| AI 读写页面数据(schema + bind) | [三层配合设计](#设计思路schema--systemprompt--skill-三层配合) · [usage-guide §6.1](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md#61-数据操作单主对象让-agent-改你的-json) |
-| 自定义工具 / skill / memory / 中间件 | [扩展点](#扩展点) · [usage-guide §6.2-6.4、§7](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) |
-| 接 LLM(DeepSeek/OpenAI 兼容/Claude/代理防泄 key) | [配置](#配置) · [usage-guide §8.6 代理](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) · `examples/proxy-demo` |
+| AI 读写页面数据(schema + bind) | [三层配合设计](#设计思路schema--systemprompt--skill-三层配合) · [usage-guide §6.1](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md#61-数据操作单主对象让-agent-改你的-json) |
+| 自定义工具 / skill / memory / 中间件 | [扩展点](#扩展点) · [usage-guide §6.2-6.4、§7](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) |
+| 接 LLM(DeepSeek/OpenAI 兼容/Claude/代理防泄 key) | [配置](#配置) · [usage-guide §8.6 代理](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) · `examples/proxy-demo` |
 | Headless / Node.js(自建 UI) | [体积与按需引入](#体积与按需引入)(headless 子路径)· `examples/headless-demo`、`examples/customize-demo` |
 | 老构建链(webpack ≤4 / vue-cli 2-3) | [体积与按需引入](#体积与按需引入)(legacy 子路径,es2017 全量打包) |
 | HTML/代码组件(AI 生成页面块) | [能力包](#createchatsdk-配置项速查)(`createHtmlSubagent`,3.9+ 自动装配)· `examples/html-page-demo`、`examples/complex-demo` |
 | RAG / MCP 工具 | [能力包](#createchatsdk-配置项速查)(`createRagSubagent`、`mcp`)· `examples/rag-demo` |
-| 让 AI 看图(贴图/截图) | [配置项速查](#createchatsdk-配置项速查)(`images`/`llm.vision`)· [usage-guide §6.17](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md#617-图片输入多模态直发--识图转述旁路) · `examples/images-demo` |
-| 文档站划词问答(选中提问 + 读当前页) | [配置项速查](#createchatsdk-配置项速查)(`dialog.autoQuote`/`capabilities.domInspect`+`pageContext`)· [usage-guide §6.20](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md#620-划词引用与页面问答page-quote--read_page--pagecontext) · `examples/docs-demo` |
-| 定制 UI(主题 / 图标 / 国际化 / 按钮文字标签) | [`DialogConfig` 字段表](#dialogconfig-字段) · [usage-guide §6.15](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md#615-ui-定制与国际化图标--主题--语言--文案覆盖317321) · `examples/i18n-demo` |
+| 让 AI 看图(贴图/截图) | [配置项速查](#createchatsdk-配置项速查)(`images`/`llm.vision`)· [usage-guide §6.17](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md#617-图片输入多模态直发--识图转述旁路) · `examples/images-demo` |
+| 文档站划词问答(选中提问 + 读当前页) | [配置项速查](#createchatsdk-配置项速查)(`dialog.autoQuote`/`capabilities.domInspect`+`pageContext`)· [usage-guide §6.20](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md#620-划词引用与页面问答page-quote--read_page--pagecontext) · `examples/docs-demo` |
+| 定制 UI(主题 / 图标 / 国际化 / 按钮文字标签) | [`DialogConfig` 字段表](#dialogconfig-字段) · [usage-guide §6.15](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md#615-ui-定制与国际化图标--主题--语言--文案覆盖317321) · `examples/i18n-demo` |
 | 会话 / 持久化(IndexedDB) | [配置项速查](#createchatsdk-配置项速查)(`storage`/`session`)· `examples/page-demo`(`storage:'indexed'` + 内置历史记录下拉) |
-| 长对话 / 大 JSON(上下文与压缩) | [usage-guide §6.8](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) · [context-management 文档](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md) |
-| 事件 / 审计 / token 用量 | [配置](#配置)(`onEvent`/`onAudit`/`sdk.usage`)· [usage-guide §6.9](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) |
-| 无人值守自动化 / 批处理 / 预算 | [配置项速查](#createchatsdk-配置项速查)(`capabilities.automation`、`sdk.batch`)· [usage-guide 自动化节](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) |
+| 长对话 / 大 JSON(上下文与压缩) | [usage-guide §6.8](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) · [context-management 文档](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md) |
+| 事件 / 审计 / token 用量 | [配置](#配置)(`onEvent`/`onAudit`/`sdk.usage`)· [usage-guide §6.9](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) |
+| 无人值守自动化 / 批处理 / 预算 | [配置项速查](#createchatsdk-配置项速查)(`capabilities.automation`、`sdk.batch`)· [usage-guide 自动化节](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) |
 | 调试(提示词 / 工具 IO / 上下文构成) | `debug: true` + 内置 DebugDrawer · `sdk.inspect()` / `sdk.debugLogs` / `sdk.inspectContext()` / `sdk.exportDiagnostics()`(一键诊断报告,全文复制交维护者排查) |
-| 全量 API / 逐项深挖 | [Agent 接入速查](#agent-接入速查给-ai-agent-读) · [usage-guide](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) · [doc 索引](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.md) |
+| 全量 API / 逐项深挖 | [Agent 接入速查](#agent-接入速查给-ai-agent-读) · [usage-guide](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) · [doc 索引](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.md) |
 
 ## 适合谁
 
@@ -383,7 +383,7 @@ npm i page-agent-sdk
 cp -R node_modules/page-agent-sdk/skills/page-agent-sdk-integrate ~/.claude/skills/
 
 # 方式 B —— 从仓库下载（无需安装）
-curl -L https://github.com/whyymj/page-agent-sdk/tarball/master | tar xz --strip-components=1 --wildcards '*/skills/page-agent-sdk-integrate'
+curl -L https://github.com/wuhao870623/page-agent-sdk/tarball/master | tar xz --strip-components=1 --wildcards '*/skills/page-agent-sdk-integrate'
 mv skills/page-agent-sdk-integrate ~/.claude/skills/
 ```
 
@@ -518,12 +518,12 @@ function switchTo(i: number) {
 
 | 文档 | 内容 |
 |---|---|
-| [文档索引](https://github.com/whyymj/page-agent-sdk/blob/master/doc/README.md) | 各文档导航 + 其他信息源（规范/变更/自测） |
-| [使用手册](https://github.com/whyymj/page-agent-sdk/blob/master/doc/usage-guide.md) | 安装 / 配置项 / 能力详解 / 自定义中间件 / FAQ |
-| [功能架构](https://github.com/whyymj/page-agent-sdk/blob/master/doc/architecture.md) | 分层 / 控制流 / 数据操作安全流 |
-| [上下文与压缩](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md) | 上下文组成 / 4 层压缩 / 流程图 |
-| [文件全览](https://github.com/whyymj/page-agent-sdk/blob/master/doc/architecture-files.md) | 逐文件职责 / 依赖 / 数据流 |
-| [CLAUDE.md](https://github.com/whyymj/page-agent-sdk/blob/master/CLAUDE.md) | **agent 必读** · 架构要点 / 约定坑 / 编码规范 |
+| [文档索引](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/README.md) | 各文档导航 + 其他信息源（规范/变更/自测） |
+| [使用手册](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/usage-guide.md) | 安装 / 配置项 / 能力详解 / 自定义中间件 / FAQ |
+| [功能架构](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/architecture.md) | 分层 / 控制流 / 数据操作安全流 |
+| [上下文与压缩](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md) | 上下文组成 / 4 层压缩 / 流程图 |
+| [文件全览](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/architecture-files.md) | 逐文件职责 / 依赖 / 数据流 |
+| [CLAUDE.md](https://github.com/wuhao870623/page-agent-sdk/blob/master/CLAUDE.md) | **agent 必读** · 架构要点 / 约定坑 / 编码规范 |
 
 ## 自测
 
@@ -624,7 +624,7 @@ npm test
 
 ## 与 Deep Agents 的关系
 
-借鉴 [Deep Agents](https://github.com/langchain-ai/deepagents) 的 harness 思路（ReAct + 中间件 + planning + skills + memory + context 管理），但自研实现：不引 LangGraph/langchain 整包；面向浏览器端（持久化用 IndexedDB 而非服务端 DB）；上下文用输入压缩 + 内存裁剪 + 大结果 offload，而非每步 checkpointer 存档。详见 [上下文与压缩 - 与 Deep Agents 的差异](https://github.com/whyymj/page-agent-sdk/blob/master/doc/context-management.md#七与-deep-agents-的差异)。
+借鉴 [Deep Agents](https://github.com/langchain-ai/deepagents) 的 harness 思路（ReAct + 中间件 + planning + skills + memory + context 管理），但自研实现：不引 LangGraph/langchain 整包；面向浏览器端（持久化用 IndexedDB 而非服务端 DB）；上下文用输入压缩 + 内存裁剪 + 大结果 offload，而非每步 checkpointer 存档。详见 [上下文与压缩 - 与 Deep Agents 的差异](https://github.com/wuhao870623/page-agent-sdk/blob/master/doc/context-management.md#七与-deep-agents-的差异)。
 
 ## 致谢
 
@@ -649,4 +649,4 @@ copies or substantial portions of the Software.
 
 ## License
 
-[ISC](https://github.com/whyymj/page-agent-sdk/blob/master/LICENSE)
+[ISC](https://github.com/wuhao870623/page-agent-sdk/blob/master/LICENSE)
